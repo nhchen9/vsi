@@ -393,9 +393,34 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 //rc = s_send_status(peer_fd, STATUS_OK, cat_buff);
 
                 const char * res = json_object_get_string(data_json);
-                rc = s_send_status(peer_fd, STATUS_OK, res);
-                //struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
 
+                struct aws_byte_buf data_decrypted = aws_byte_buf_from_c_str(res);
+
+                struct aws_byte_buf data_reencrypted;
+
+                rc = aws_kms_encrypt_blocking(client, &data_decrypted, &data_reencrypted);
+                aws_byte_buf_clean_up(&data_decrypted);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt plaintext");
+
+
+                json_object_put(object);
+
+                /* Encode ciphertext into base64 for sending back result. */
+                size_t data_b64_len;
+                struct aws_byte_buf data_b64_reencrypted;
+                struct aws_byte_cursor data_reencrypted_cursor = aws_byte_cursor_from_buf(&data_reencrypted);
+                aws_base64_compute_encoded_len(data_reencrypted.len, &data_b64_len);
+                rc = aws_byte_buf_init(&data_b64_reencrypted, app_ctx->allocator, data_b64_len + 1);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Memory allocation error");
+                rc = aws_base64_encode(&data_reencrypted_cursor, &data_b64_reencrypted);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Base64 encoding error");
+                aws_byte_buf_append_null_terminator(&data_b64_reencrypted);
+
+
+                rc = s_send_status(peer_fd, STATUS_OK, (const char *)data_b64_reencrypted.buffer);
+                //struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
+                aws_byte_buf_clean_up(&data_reencrypted); 
+                break_on(rc <= 0);
 
             }else{
                 // status query

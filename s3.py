@@ -46,6 +46,7 @@ def run_instance(cid, data, command):
     msg = re.findall('Message": "(.*?)" }\n', container)[0]
     return msg
 if __name__ == '__main__':
+    
     encrypted_commands = get_s3_data("encrypted_commands")
     cmd_list = encrypted_commands.split("\n")
 
@@ -61,17 +62,17 @@ if __name__ == '__main__':
         encrypted_data = get_s3_data(s3_data_key)
         if not encrypted_data:
             encrypted_data = kms_client.encrypt(KeyId=KMS_KEY_ARN, Plaintext="{}")
+            print(encrypted_data)
             encrypted_data = base64.b64encode(encrypted_data['CiphertextBlob']).decode()
-
+        
         print(plain_cmd_ref[counter])
         counter += 1
-        msg = run_instance(65, encrypted_data, cmd).replace("\\", "")
+        msg = run_instance(24, encrypted_data, cmd).replace("\\", "")
         if len(msg) > 1:
             print("Command {c}: Data update, Result: {res}".format(c = counter, res = msg))
-            encrypted_data = kms_client.encrypt(KeyId=KMS_KEY_ARN, Plaintext=msg)
-            encrypted_data = base64.b64encode(encrypted_data['CiphertextBlob']).decode()
-            #print(encrypted_data)
-            upload_file("decrypted_data", msg)
+            encrypted_data = msg #kms_client.encrypt(KeyId=KMS_KEY_ARN, Plaintext=msg)
+            #print("DEMO PRINT DATA: %s\n", kms_client.decrypt(CiphertextBlob=encrypted_data))
+
             upload_file(s3_data_key, encrypted_data)
         else:
             print("Command {c}: Status Query, Result: {res}".format(c = counter, res = msg))

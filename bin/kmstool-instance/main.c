@@ -25,9 +25,10 @@
 struct app_ctx {
     struct aws_allocator *allocator;
     const struct aws_string *message;
+    const struct aws_string *data;
     const struct aws_string *region;
     const struct aws_string *command;
-    //const struct aws_string *result;
+    const struct aws_string *data_key;
     uint32_t port;
     uint32_t cid;
     int peer_fd;
@@ -103,11 +104,15 @@ static void s_parse_options(int argc, char **argv, struct app_ctx *ctx) {
     }
 
     if (aws_cli_optind < argc) {
-        ctx->message = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+        ctx->command = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
     }
 
     if (aws_cli_optind < argc) {
-        ctx->command = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+        ctx->data = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+    }
+
+    if (aws_cli_optind < argc) {
+        ctx->data_key = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
     }
 
     /*
@@ -381,8 +386,15 @@ end:
 int s_send_decrypt_command(struct app_ctx *app_ctx) {
     struct json_object *decrypt = json_object_new_object();
     json_object_object_add(decrypt, "Operation", json_object_new_string("Decrypt"));
-    json_object_object_add(decrypt, "Ciphertext", json_object_new_string(aws_string_c_str(app_ctx->message)));
     json_object_object_add(decrypt, "command", json_object_new_string(aws_string_c_str(app_ctx->command)));
+    
+    if (app_ctx->data){
+        json_object_object_add(decrypt, "Ciphertext", json_object_new_string(aws_string_c_str(app_ctx->data)));
+    }
+    
+    if (app_ctx->data_key){
+        json_object_object_add(decrypt, "data_key", json_object_new_string(aws_string_c_str(app_ctx->data_key)));
+    }
     return s_write_object(app_ctx->peer_fd, decrypt);
 }
 

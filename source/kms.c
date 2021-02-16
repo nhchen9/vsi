@@ -2685,9 +2685,10 @@ int aws_kms_decrypt_blocking(
         goto err_clean;
     }
 
+    fprintf(stderr, "decrypt response string:%s\n", aws_string_c_str(response));
+
     rc = s_decrypt_ciphertext_for_recipient(
         client->allocator, &response_structure->ciphertext_for_recipient, client->keypair, plaintext);
-
     aws_kms_decrypt_request_destroy(request_structure);
     aws_kms_decrypt_response_destroy(response_structure);
     aws_string_destroy(request);
@@ -2745,6 +2746,8 @@ int aws_kms_encrypt_blocking(
     rc = s_aws_nitro_enclaves_kms_client_call_blocking(client, kms_target_encrypt, request, &response);
     if (rc != 200) {
         fprintf(stderr, "Got non-200 answer from KMS: %d\n", rc);
+        fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
+        fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
         goto err_clean;
     }
 

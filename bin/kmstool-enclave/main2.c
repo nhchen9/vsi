@@ -10,14 +10,6 @@
 #include <linux/vm_sockets.h>
 #include <sys/socket.h>
 
-#include <openssl/rsa.h>
-#include <openssl/pem.h>
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/bio.h>
-#include <openssl/x509.h>
-#include <openssl/rand.h>
-
 #include <errno.h>
 #include <unistd.h>
 #include <dirent.h> 
@@ -281,8 +273,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
         fail_on(operation == NULL, loop_next_err, "JSON structure incomplete");
         fail_on(!json_object_is_type(operation, json_type_string), loop_next_err, "Operation is wrong type");
 
-        struct json_object *data_key_obj = json_object_object_get(object, "data_key");
-
         if (strcmp(json_object_get_string(operation), "SetClient") == 0) {
             /* SetClient operation sets the AWS credentials and optionally a region and
              * creates a matching KMS client. This needs to be called before Decrypt. */
@@ -311,39 +301,20 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
             rc = s_send_status(peer_fd, STATUS_OK, NULL);
             fail_on(rc <= 0, exit_clean_json, "Could not send status");
-
-
-
-
         } else if (strcmp(json_object_get_string(operation), "Decrypt") == 0) {
             /* Decrypt uses KMS to decrypt the data passed to it in the Ciphertext
              * field and sends it back to the called*
              * TODO: This should instead send a hash of the data instead.
              */
-
-            
             fail_on(client == NULL, loop_next_err, "Client not initialized");
 
-            /*
-             1. Decrypt data key
-                If no key, assert no data.  If neither, create new data.
-             2. Decrypt data
-             3. Decrypt command
-             4. Run command
-             5. Return val (either result or updated data)
-             */
-
             struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
-            struct json_object *data_key_obj = json_object_object_get(object, "data_key");
-            
-            
             fail_on(ciphertext_obj == NULL, loop_next_err, "Message does not contain a Ciphertext");
             fail_on(
                 !json_object_is_type(ciphertext_obj, json_type_string),
                 loop_next_err,
                 "Ciphertext not a base64 string");
 
-            
             /* Get decode base64 string into bytes. */
             size_t ciphertext_len;
             struct aws_byte_buf ciphertext;
@@ -380,53 +351,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             rc = aws_kms_decrypt_blocking(client, &command, &command_decrypted);
             aws_byte_buf_clean_up(&command);
             fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
-
-
-
-
-
             
-            //size_t data_key_len;
-            //struct aws_byte_buf data_key;
-            if (data_key_obj == NULL){
-                fprintf(stderr, "no key, make a new one!");
-                unsigned char rand_key[256];
-                char key[257];
-                RAND_bytes(rand_key, 256);
-                for ( int i = 0 ; i < 256 ; i++ ){
-                    key[i] = rand_key[i]%90 + 33;
-                }
-                key[256] = '\0';
-
-                fprintf(stderr, (char *) key);
-                fprintf(stderr, "\n");
-
-                struct aws_byte_buf dec_key = aws_byte_buf_from_c_str((char *) key);
-                struct aws_byte_buf enc_key;
-
-                rc = aws_kms_encrypt_blocking(client, &dec_key, &enc_key);
-                //aws_byte_buf_clean_up(&dec_key);
-                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
-                fprintf(stderr, (char *) enc_key.buffer);
-
-                struct aws_byte_buf redec_key;
-                
-                rc = aws_kms_decrypt_blocking(client, &enc_key, &redec_key);
-                //aws_byte_buf_clean_up(&enc_key);
-                //aws_byte_buf_clean_up(&redec_key);
-                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt data key");
-                fprintf(stderr, "\ndecrypted key %d\n", (int)rc);
-                fprintf(stderr, (char *) redec_key.buffer);
-                if (strcmp((char *) dec_key.buffer, (char *) redec_key.buffer)){
-                    fprintf(stderr, "\n key mismatch! \n");
-                }else{
-                    fprintf(stderr, "\n key match \n");
-                }
-            }else{
-                fprintf(stderr, "got data key: %s\n", json_object_get_string(data_key_obj));
-            }
-
-
             /*
             json_object_put(object);
             size_t ciphertext_decrypted_b64_len;
@@ -478,7 +403,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt plaintext");
 
 
-                //json_object_put(object);
+                json_object_put(object);
 
                 /* Encode ciphertext into base64 for sending back result. */
                 size_t data_b64_len;
@@ -494,7 +419,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 rc = s_send_status(peer_fd, STATUS_OK, (const char *)data_b64_reencrypted.buffer);
                 //struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
-                aws_byte_buf_clean_up(&data_reencrypted);
+                aws_byte_buf_clean_up(&data_reencrypted); 
                 break_on(rc <= 0);
 
             }else{

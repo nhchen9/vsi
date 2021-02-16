@@ -77,23 +77,28 @@ def make_data(users, hist_len):
 
 if __name__ == '__main__':
     
+    
+
+
     encrypted_commands = get_s3_data("encrypted_commands")
     cmd_list = encrypted_commands.split("\n")
 
 
     counter = 0
-    s3_data_key = "100000_10.enc"
+    s3_data_key = "100000_10.txt"
     session = boto3.session.Session(region_name='us-west-2')
     kms_client = session.client('kms')
+    encrypted_data = get_s3_plaintext(s3_data_key)
 
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
     query_times = []
     update_times = []
     upload_times = []
     #for cmd in cmd_list:
-    for i in range(20):
+    for i in range(100):
         t0 = time.time()
-        encrypted_data = get_s3_plaintext(s3_data_key)
+        
+        upload_file(s3_data_key, encrypted_data)
         '''
         if not encrypted_data:
             dat = json.dumps(make_data(100,2))
@@ -121,14 +126,11 @@ if __name__ == '__main__':
         '''
         t1 = time.time()
         print("total time: ", t1 - t0)
-        if " " in plain_cmd_ref[counter]:
-            update_times.append(t1-t0)
-        else:
-            query_times.append(t1-t0)
+        query_times.append(t1-t0)
         counter += 1
         #time.sleep(1)
-    print("avg upload time:", np.mean(upload_times), np.std(upload_times))
-    print("avg update time:", np.mean(update_times), np.std(update_times))
+    #print("avg upload time:", np.mean(upload_times), np.std(upload_times))
+    #print("avg update time:", np.mean(update_times), np.std(update_times))
     print("avg query time:", np.mean(query_times), np.std(query_times))
     
     '''

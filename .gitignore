@@ -1,4 +1,5 @@
 # IDE Artifacts
+out.txt
 .metadata
 .build
 .idea

@@ -904,6 +904,12 @@ int aws_kms_encrypt_blocking(
     struct aws_byte_buf *ciphertext /* TODO: err_reason */);
 
 AWS_NITRO_ENCLAVES_API
+char * aws_kms_encrypt_get_cipher(
+    struct aws_nitro_enclaves_kms_client *client,
+    const struct aws_byte_buf *plaintext,
+    struct aws_byte_buf *ciphertext /* TODO: err_reason */);
+
+AWS_NITRO_ENCLAVES_API
 int aws_kms_generate_data_key_blocking(
     struct aws_nitro_enclaves_kms_client *client,
     const struct aws_string *key_id,

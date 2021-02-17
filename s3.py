@@ -57,7 +57,9 @@ def run_instance(cid, data, command):
     container = docker_client.containers.run(image='kmstool-instance', network='host', command='/kmstool_instance --cid "{cid}" "{data}" "{command}"'.format(cid=cid, data=data, command=command), remove = True, stdout = False, stderr = True, detach=False)
     
     #print(container.logs(stdout=True, stderr=True))
-    msg = re.findall('Message": "(.*?)" }\n', container)[0]
+    encData = re.findall('EncData": "(.*?)",', container)[0]
+    encKey = re.findall('KeyPackage": "(.*?)" }', container)[0]
+    
     return msg
 
 def num_to_id(i):
@@ -76,7 +78,7 @@ def make_data(users, hist_len):
     return dat
 
 if __name__ == '__main__':
-    
+    '''
     encrypted_commands = get_s3_data("encrypted_commands")
     cmd_list = encrypted_commands.split("\n")
 
@@ -94,7 +96,7 @@ if __name__ == '__main__':
     for i in range(20):
         t0 = time.time()
         encrypted_data = get_s3_plaintext(s3_data_key)
-        '''
+        
         if not encrypted_data:
             dat = json.dumps(make_data(100,2))
             print(len(dat))
@@ -118,7 +120,7 @@ if __name__ == '__main__':
         else:
             print("Command {c}: Status Query, Result: {res}".format(c = counter, res = msg))
         #break
-        '''
+        
         t1 = time.time()
         print("total time: ", t1 - t0)
         if " " in plain_cmd_ref[counter]:
@@ -130,7 +132,7 @@ if __name__ == '__main__':
     print("avg upload time:", np.mean(upload_times), np.std(upload_times))
     print("avg update time:", np.mean(update_times), np.std(update_times))
     print("avg query time:", np.mean(query_times), np.std(query_times))
-    
+    '''
     '''
     for num_users in [10,100,1000,10000,100000]:
         for tests in [2,10]:
@@ -139,14 +141,10 @@ if __name__ == '__main__':
     #print(dat)
     exit(0)
     '''
-    
-    
-    """
-
 
     key = 'plaintext_commands'
     #decrypt_data(key)
-    text = open("demo_cmd.txt","rt").read()
+    text = open("cmd.txt","rt").read()
     upload_file(key, text)
 
     encrypted_commands = []
@@ -156,13 +154,11 @@ if __name__ == '__main__':
     kms_client = session.client('kms')
 
     for cmd in commands:
-        if len(cmd) < 6:
-            continue
         encrypted_data = kms_client.encrypt(KeyId=KMS_KEY_ARN, Plaintext=cmd)
         encrypted_commands.append(base64.b64encode(encrypted_data['CiphertextBlob']).decode())
     encrypted_commands_str = "\n".join(encrypted_commands)
-    key = "encrypted_commands"
+    key = "encrypted_commands2"
     upload_file(key, encrypted_commands_str)
 
     print(encrypted_commands_str)
-    """
+    

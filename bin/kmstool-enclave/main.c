@@ -26,6 +26,10 @@
 #define BUF_SIZE 8192
 AWS_STATIC_STRING_FROM_LITERAL(default_region, "us-west-2");
 
+unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
+unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
+
+
 enum status {
     STATUS_OK,
     STATUS_ERR,
@@ -206,6 +210,144 @@ int s_send_status(int peer_fd, int status, const char *msg) {
     return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
 }
 
+int s_send_data_key(int peer_fd, int status, char * enc_data, char * enc_key) {
+    struct json_object *status_object = json_object_new_object();
+    if (status_object == NULL) {
+        return -1;
+    }
+
+    json_object_object_add(status_object, "Status", json_object_new_string(status == STATUS_OK ? "Ok" : "Error"));
+
+
+    if (enc_data != NULL) {
+        json_object_object_add(status_object, "EncData", json_object_new_string(enc_data));
+    }
+
+    if (enc_key != NULL) {
+        json_object_object_add(status_object, "KeyPackage", json_object_new_string(enc_key));
+    }
+
+    const char *status_str = json_object_to_json_string(status_object);
+    return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
+}
+
+void handleErrors(void)
+{
+    ERR_print_errors_fp(stderr);
+    abort();
+}
+
+int encrypt(unsigned char *plaintext, int plaintext_len, unsigned char *key,
+            unsigned char *iv, unsigned char *ciphertext)
+{
+    EVP_CIPHER_CTX *ctx;
+
+    int len;
+
+    int ciphertext_len;
+
+    /* Create and initialise the context */
+    if(!(ctx = EVP_CIPHER_CTX_new()))
+        handleErrors();
+
+    /*
+     * Initialise the encryption operation. IMPORTANT - ensure you use a key
+     * and IV size appropriate for your cipher
+     * In this example we are using 256 bit AES (i.e. a 256 bit key). The
+     * IV size for *most* modes is the same as the block size. For AES this
+     * is 128 bits
+     */
+    if(1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
+        handleErrors();
+
+    /*
+     * Provide the message to be encrypted, and obtain the encrypted output.
+     * EVP_EncryptUpdate can be called multiple times if necessary
+     */
+    if(1 != EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext, plaintext_len))
+        handleErrors();
+    ciphertext_len = len;
+
+    /*
+     * Finalise the encryption. Further ciphertext bytes may be written at
+     * this stage.
+     */
+    if(1 != EVP_EncryptFinal_ex(ctx, ciphertext + len, &len))
+        handleErrors();
+    ciphertext_len += len;
+
+    /* Clean up */
+    EVP_CIPHER_CTX_free(ctx);
+
+    return ciphertext_len;
+}
+
+int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
+            unsigned char *iv, unsigned char *plaintext)
+{
+    EVP_CIPHER_CTX *ctx;
+
+    int len;
+
+    int plaintext_len;
+
+    /* Create and initialise the context */
+    if(!(ctx = EVP_CIPHER_CTX_new()))
+        handleErrors();
+
+    /*
+     * Initialise the decryption operation. IMPORTANT - ensure you use a key
+     * and IV size appropriate for your cipher
+     * In this example we are using 256 bit AES (i.e. a 256 bit key). The
+     * IV size for *most* modes is the same as the block size. For AES this
+     * is 128 bits
+     */
+    if(1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv))
+        handleErrors();
+
+    /*
+     * Provide the message to be decrypted, and obtain the plaintext output.
+     * EVP_DecryptUpdate can be called multiple times if necessary.
+     */
+    if(1 != EVP_DecryptUpdate(ctx, plaintext, &len, ciphertext, ciphertext_len))
+        handleErrors();
+    plaintext_len = len;
+
+    /*
+     * Finalise the decryption. Further plaintext bytes may be written at
+     * this stage.
+     */
+    if(1 != EVP_DecryptFinal_ex(ctx, plaintext + len, &len))
+        handleErrors();
+    plaintext_len += len;
+
+    /* Clean up */
+    EVP_CIPHER_CTX_free(ctx);
+
+    return plaintext_len;
+}
+
+struct aws_byte_buf b64_decode(const struct app_ctx *app_ctx, const char * encoded) {
+    size_t ciphertext_len;
+    struct aws_byte_buf ciphertext;
+    struct aws_byte_cursor ciphertext_b64 = aws_byte_cursor_from_c_str(encoded);
+    aws_base64_compute_decoded_len(&ciphertext_b64, &ciphertext_len);
+    aws_byte_buf_init(&ciphertext, app_ctx->allocator, ciphertext_len);
+    aws_base64_decode(&ciphertext_b64, &ciphertext);
+    return ciphertext;
+}
+
+struct aws_byte_buf b64_encode(const struct app_ctx *app_ctx, const unsigned char * buf, const int len){
+    size_t encoded_data_len;
+    struct aws_byte_buf encoded_data; // base 64 encrypted data
+    struct aws_byte_cursor decoded_cursor = aws_byte_cursor_from_array(buf, len);
+    aws_base64_compute_encoded_len(len, &encoded_data_len);
+    aws_byte_buf_init(&encoded_data, app_ctx->allocator, encoded_data_len);
+    aws_base64_encode(&decoded_cursor, &encoded_data);
+    return encoded_data;
+}
+
+    
 static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
     char buf[BUF_SIZE] = {0};
     size_t buf_idx = 0;
@@ -281,7 +423,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
         fail_on(operation == NULL, loop_next_err, "JSON structure incomplete");
         fail_on(!json_object_is_type(operation, json_type_string), loop_next_err, "Operation is wrong type");
 
-        struct json_object *data_key_obj = json_object_object_get(object, "data_key");
+        
 
         if (strcmp(json_object_get_string(operation), "SetClient") == 0) {
             /* SetClient operation sets the AWS credentials and optionally a region and
@@ -321,7 +463,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
              * TODO: This should instead send a hash of the data instead.
              */
 
-            
             fail_on(client == NULL, loop_next_err, "Client not initialized");
 
             /*
@@ -334,46 +475,61 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
              */
 
             struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
-            struct json_object *data_key_obj = json_object_object_get(object, "data_key");
+            struct json_object *datakey_obj = json_object_object_get(object, "data_key");
             
-            
-            fail_on(ciphertext_obj == NULL, loop_next_err, "Message does not contain a Ciphertext");
-            fail_on(
-                !json_object_is_type(ciphertext_obj, json_type_string),
-                loop_next_err,
-                "Ciphertext not a base64 string");
+            fail_on(datakey_obj == NULL && ciphertext_obj != NULL, loop_next_err, "Ciphertext needs data key");
 
-            
-            /* Get decode base64 string into bytes. */
-            size_t ciphertext_len;
-            struct aws_byte_buf ciphertext;
-            struct aws_byte_cursor ciphertext_b64 = aws_byte_cursor_from_c_str(json_object_get_string(ciphertext_obj));
+            struct json_object *data_json = NULL;
 
-            rc = aws_base64_compute_decoded_len(&ciphertext_b64, &ciphertext_len);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
-            rc = aws_byte_buf_init(&ciphertext, app_ctx->allocator, ciphertext_len);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Memory allocation error");
-            rc = aws_base64_decode(&ciphertext_b64, &ciphertext);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
+            if (ciphertext_obj == NULL){
+                data_json = json_tokener_parse("{}");
+            }else{
 
-            /* Decrypt the data with KMS. */
-            struct aws_byte_buf ciphertext_decrypted;
-            rc = aws_kms_decrypt_blocking(client, &ciphertext, &ciphertext_decrypted);
-            aws_byte_buf_clean_up(&ciphertext);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
+                fprintf(stderr, json_object_get_string(datakey_obj));
+                
+                struct aws_byte_buf cipherkey = b64_decode(app_ctx, json_object_get_string(datakey_obj));
 
+                struct aws_byte_buf datakey_package_decrypted;
+                rc = aws_kms_decrypt_blocking(client, &cipherkey, &datakey_package_decrypted);
 
+                unsigned char datakey [257];
+                unsigned char iv [129];
+                
+                datakey[256] = '\0';
+                iv[128] = '\0';
+
+                memcpy(datakey, (char *) datakey_package_decrypted.buffer, 256);
+                memcpy(iv, ((char*) datakey_package_decrypted.buffer) + 256, 128);
+
+                fprintf(stderr, "KMS Decrypted data key: %s\n", (char *) datakey);
+                fprintf(stderr, "KMS Decrypted data iv: %s\n", (char *) iv);
+                
+                const char * b64_cipher_const = json_object_get_string(ciphertext_obj);
+                char b64_ciphertext [strlen(b64_cipher_const)];
+                memset(b64_ciphertext, 0, sizeof(b64_ciphertext));
+                strcpy(b64_ciphertext, b64_cipher_const);
+
+                fprintf(stderr, "\nb64 cipher: %s\n", b64_ciphertext);
+
+                struct aws_byte_buf ciphertext = b64_decode(app_ctx, b64_ciphertext);
+
+                char plaintext [1000000];
+                memset(plaintext, 0, sizeof(plaintext));
+
+                fprintf(stderr, "\nencrypt length: %d\n", (int) ciphertext.len);
+
+                int db = decrypt(ciphertext.buffer, ciphertext.len, HARD_DATAKEY, HARD_IV, (unsigned char *) plaintext);
+                fprintf(stderr, "decrypted %d\n", db);
+                struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str(plaintext);
+
+                data_json = json_tokener_parse((char *)ciphertext_decrypted.buffer);
+
+            }
 
             struct json_object *command_obj = json_object_object_get(object, "command");
-            size_t command_len;
-            struct aws_byte_buf command;
-            struct aws_byte_cursor command_b64 = aws_byte_cursor_from_c_str(json_object_get_string(command_obj));
-            rc = aws_base64_compute_decoded_len(&command_b64, &command_len);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
-            rc = aws_byte_buf_init(&command, app_ctx->allocator, command_len);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Memory allocation error");
-            rc = aws_base64_decode(&command_b64, &command);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
+
+            
+            struct aws_byte_buf command = b64_decode(app_ctx, json_object_get_string(command_obj));
 
             /* Decrypt the data with KMS. */
             struct aws_byte_buf command_decrypted;
@@ -381,66 +537,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             aws_byte_buf_clean_up(&command);
             fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
 
-
-
-
-
             
-            //size_t data_key_len;
-            //struct aws_byte_buf data_key;
-            if (data_key_obj == NULL){
-                fprintf(stderr, "no key, make a new one!");
-                unsigned char rand_key[256];
-                char key[257];
-                RAND_bytes(rand_key, 256);
-                for ( int i = 0 ; i < 256 ; i++ ){
-                    key[i] = rand_key[i]%90 + 33;
-                }
-                key[256] = '\0';
-
-                fprintf(stderr, (char *) key);
-                fprintf(stderr, "\n");
-
-                struct aws_byte_buf dec_key = aws_byte_buf_from_c_str((char *) key);
-                struct aws_byte_buf enc_key;
-
-                rc = aws_kms_encrypt_blocking(client, &dec_key, &enc_key);
-                //aws_byte_buf_clean_up(&dec_key);
-                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
-                fprintf(stderr, (char *) enc_key.buffer);
-
-                struct aws_byte_buf redec_key;
-                
-                rc = aws_kms_decrypt_blocking(client, &enc_key, &redec_key);
-                //aws_byte_buf_clean_up(&enc_key);
-                //aws_byte_buf_clean_up(&redec_key);
-                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt data key");
-                fprintf(stderr, "\ndecrypted key %d\n", (int)rc);
-                fprintf(stderr, (char *) redec_key.buffer);
-                if (strcmp((char *) dec_key.buffer, (char *) redec_key.buffer)){
-                    fprintf(stderr, "\n key mismatch! \n");
-                }else{
-                    fprintf(stderr, "\n key match \n");
-                }
-            }else{
-                fprintf(stderr, "got data key: %s\n", json_object_get_string(data_key_obj));
-            }
-
-
-            /*
-            json_object_put(object);
-            size_t ciphertext_decrypted_b64_len;
-            struct aws_byte_buf ciphertext_decrypted_b64;
-            struct aws_byte_cursor ciphertext_decrypted_cursor = aws_byte_cursor_from_buf(&ciphertext_decrypted);
-            aws_base64_compute_encoded_len(ciphertext_decrypted.len, &ciphertext_decrypted_b64_len);
-            rc = aws_byte_buf_init(&ciphertext_decrypted_b64, app_ctx->allocator, ciphertext_decrypted_b64_len + 1);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Memory allocation error");
-            rc = aws_base64_encode(&ciphertext_decrypted_cursor, &ciphertext_decrypted_b64);
-            fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Base64 encoding error");
-            aws_byte_buf_append_null_terminator(&ciphertext_decrypted_b64);
-            */
-
-            struct json_object *data_json = json_tokener_parse((char *)ciphertext_decrypted.buffer);
             if (data_json == NULL){
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
@@ -467,8 +564,85 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 //rc = s_send_status(peer_fd, STATUS_OK, cat_buff);
 
-                const char * res = json_object_get_string(data_json);
 
+                /* TO DO - GENERATE RANDOM KEY INSTEAD OF USING HARDCODED KEY AND IV */
+
+
+
+                const char * res = json_object_get_string(data_json);
+                unsigned char copy_res [strlen(res)+1];
+                copy_res[strlen(res)] = '\0';
+                memcpy(copy_res, res, strlen(res));
+                unsigned char reencrypted_data [1000000];
+                memset(reencrypted_data, 0, sizeof(reencrypted_data));
+                fprintf(stderr, "%s\n", (char *) res);
+
+                int eb = encrypt(copy_res, strlen(res), HARD_DATAKEY, HARD_IV, reencrypted_data); // byte array encrypted data
+                fprintf(stderr, "\nencrypt length: %d\n", eb);
+                //reencrypted_data[enc_len] = '\0';
+                //rc = s_send_status(peer_fd, STATUS_OK, (char *)reencrypted_data);
+                unsigned char buf [1000];
+                memset(buf, 0, sizeof(buf));
+                fprintf(stderr, "%s\n", (char *) reencrypted_data);
+
+                struct aws_byte_buf encoded_reencrypted_data = b64_encode(app_ctx, reencrypted_data, eb); // base 64 encrypted data
+
+                fprintf(stderr, "encoded reencrypted %s\n", (char *) encoded_reencrypted_data.buffer);
+
+                unsigned char keypackage [strlen((char*)HARD_DATAKEY) + strlen((char*)HARD_IV)];
+                memset(keypackage, 0, sizeof(keypackage));
+                memcpy(keypackage, HARD_DATAKEY, strlen((char *) HARD_DATAKEY));
+                strcat((char *) keypackage, (char *) HARD_IV);
+                fprintf(stderr, "%s\n", (char *) keypackage);
+
+                struct aws_byte_buf dec_key = aws_byte_buf_from_c_str((char *) keypackage);
+                struct aws_byte_buf enc_key;
+
+                enc_key = aws_byte_buf_from_c_str(aws_kms_encrypt_get_cipher(client, &dec_key, &enc_key));  // base 64 encrypted key
+                //aws_byte_buf_clean_up(&dec_key);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
+
+                rc = s_send_data_key(peer_fd, STATUS_OK, (char *) encoded_reencrypted_data.buffer, (char *) enc_key.buffer);
+
+                /*
+                size_t recipherkey_len;
+                struct aws_byte_buf recipherkey; // byte array key
+                struct aws_byte_cursor enc_key_cursor= aws_byte_cursor_from_buf(&enc_key);
+
+                rc = aws_base64_compute_decoded_len(&enc_key_cursor, &recipherkey_len);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
+                rc = aws_byte_buf_init(&recipherkey, app_ctx->allocator, recipherkey_len);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Memory allocation error");
+                rc = aws_base64_decode(&enc_key_cursor, &recipherkey);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Ciphertext not a base64 string");
+
+                struct aws_byte_buf redec_key;
+                rc = aws_kms_decrypt_blocking(client, &recipherkey, &redec_key);
+                //aws_byte_buf_clean_up(&enc_key);
+                //aws_byte_buf_clean_up(&redec_key);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt data key");
+                
+
+                unsigned char recovered_key[257];
+                unsigned char recovered_iv[129];
+                memcpy(recovered_key, (char *) redec_key.buffer, 256);
+                memcpy(recovered_iv, (char *) redec_key.buffer + 256, 128);
+                recovered_key[256] = '\0';
+                recovered_iv[128] = '\0';
+
+                fprintf(stderr, "\nrecovered key %s\n", (char *) recovered_key);
+                fprintf(stderr, "\nrecovered iv %s\n", (char *) recovered_iv);
+
+
+                int dec_len = decrypt(reencrypted_data, eb, recovered_key, recovered_iv, buf);
+                buf[dec_len] = '\0';
+
+                
+
+                rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
+                */
+
+                /*
                 struct aws_byte_buf data_decrypted = aws_byte_buf_from_c_str(res);
 
                 struct aws_byte_buf data_reencrypted;
@@ -480,7 +654,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 //json_object_put(object);
 
-                /* Encode ciphertext into base64 for sending back result. */
+                
                 size_t data_b64_len;
                 struct aws_byte_buf data_b64_reencrypted;
                 struct aws_byte_cursor data_reencrypted_cursor = aws_byte_cursor_from_buf(&data_reencrypted);
@@ -495,6 +669,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 rc = s_send_status(peer_fd, STATUS_OK, (const char *)data_b64_reencrypted.buffer);
                 //struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
                 aws_byte_buf_clean_up(&data_reencrypted);
+                */
                 break_on(rc <= 0);
 
             }else{
@@ -537,6 +712,48 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             rc = s_send_status(peer_fd, STATUS_ERR, "Operation not recognized");
             break_on(rc <= 0);
         }
+
+        /*
+            RANDOM KEYGEN AND ENCRYPTION
+            
+            if (data_key_obj == NULL){
+                fprintf(stderr, "no key, make a new one!");
+                unsigned char rand_key[256];
+                char key[257];
+                RAND_bytes(rand_key, 256);
+                for ( int i = 0 ; i < 256 ; i++ ){
+                    key[i] = rand_key[i]%90 + 33;
+                }
+                key[256] = '\0';
+
+                fprintf(stderr, (char *) key);
+                fprintf(stderr, "\n");
+
+                struct aws_byte_buf dec_key = aws_byte_buf_from_c_str((char *) key);
+                struct aws_byte_buf enc_key;
+
+                rc = aws_kms_encrypt_blocking(client, &dec_key, &enc_key);
+                //aws_byte_buf_clean_up(&dec_key);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
+                fprintf(stderr, (char *) enc_key.buffer);
+
+                struct aws_byte_buf redec_key;
+                
+                rc = aws_kms_decrypt_blocking(client, &enc_key, &redec_key);
+                //aws_byte_buf_clean_up(&enc_key);
+                //aws_byte_buf_clean_up(&redec_key);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt data key");
+                fprintf(stderr, "\ndecrypted key %d\n", (int)rc);
+                fprintf(stderr, (char *) redec_key.buffer);
+                if (strcmp((char *) dec_key.buffer, (char *) redec_key.buffer)){
+                    fprintf(stderr, "\n key mismatch! \n");
+                }else{
+                    fprintf(stderr, "\n key match \n");
+                }
+            }else{
+                fprintf(stderr, "got data key: %s\n", json_object_get_string(data_key_obj));
+            }
+        */
 
         json_object_put(object);
         object = NULL;

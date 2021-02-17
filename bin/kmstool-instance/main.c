@@ -120,10 +120,6 @@ static void s_parse_options(int argc, char **argv, struct app_ctx *ctx) {
         ctx->result = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
     }
     */
-
-    if (ctx->message == NULL) {
-        s_usage(1);
-    }
 }
 
 void s_creds_callback(struct aws_credentials *credentials, int error_code, void *user_data) {

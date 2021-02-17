@@ -1371,6 +1371,43 @@ clean_up:
     return NULL;
 }
 
+char * get_ciphertext_from_json(
+    const struct aws_string *json) {
+
+    struct json_object *obj = s_json_object_from_string(json);
+    if (obj == NULL) {
+        return NULL;
+    }
+
+    struct json_object_iterator it_end = json_object_iter_end(obj);
+    for (struct json_object_iterator it = json_object_iter_begin(obj); !json_object_iter_equal(&it, &it_end);
+         json_object_iter_next(&it)) {
+            const char *key = json_object_iter_peek_name(&it);
+            struct json_object *value = json_object_iter_peek_value(&it);
+
+            fprintf(stderr, "\njson val %s\n", json_object_get_string(value));
+            const char * json_string = json_object_get_string(value);
+            if (AWS_SAFE_COMPARE(key, KMS_CIPHERTEXT_BLOB)) {
+
+                char * str_holder = malloc(strlen(json_string)+1);
+                strcpy(str_holder, json_string);
+                str_holder[strlen(json_string)] = '\0';
+                fprintf(stderr, "\njson val copied %s\n", str_holder);
+                return str_holder;
+                /*
+                const char * ret = json_object_get_string(value);
+                char * ciphertext = malloc(strlen(ret));
+                memset(ciphertext, 0, strlen(ret));
+                strcpy(ciphertext, ret);
+                return ciphertext;
+                */
+            }
+    }
+    return NULL;
+}
+
+
+
 struct aws_kms_encrypt_response *aws_kms_encrypt_response_from_json(
     struct aws_allocator *allocator,
     const struct aws_string *json) {
@@ -1399,6 +1436,8 @@ struct aws_kms_encrypt_response *aws_kms_encrypt_response_from_json(
         const char *key = json_object_iter_peek_name(&it);
         struct json_object *value = json_object_iter_peek_value(&it);
         int value_type = json_object_get_type(value);
+
+        fprintf(stderr, "\njson val %s\n", json_object_get_string(value));
 
         if (value_type != json_type_string) {
             goto clean_up;
@@ -2775,6 +2814,89 @@ err_clean:
     aws_string_destroy(request);
     aws_string_destroy(response);
     return AWS_OP_ERR;
+}
+
+char * aws_kms_encrypt_get_cipher(
+    struct aws_nitro_enclaves_kms_client *client,
+    const struct aws_byte_buf *plaintext,
+    struct aws_byte_buf *ciphertext /* TODO: err_reason */) {
+    AWS_PRECONDITION(client != NULL);
+    AWS_PRECONDITION(ciphertext != NULL);
+    AWS_PRECONDITION(plaintext != NULL);
+
+    struct aws_string *response = NULL;
+    struct aws_string *request = NULL;
+    struct aws_kms_encrypt_response *response_structure = NULL;
+    struct aws_kms_encrypt_request *request_structure = NULL;
+    int rc = 0;
+
+    request_structure = aws_kms_encrypt_request_new(client->allocator);
+    if (request_structure == NULL) {
+        return NULL;
+    }
+
+    aws_byte_buf_init_copy(&request_structure->plaintext, client->allocator, plaintext);
+    
+    const char *key_str = "arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946";
+    request_structure->key_id = aws_string_new_from_c_str(client->allocator, key_str);
+
+    
+
+    request = aws_kms_encrypt_request_to_json(request_structure);
+    if (request == NULL) {
+        goto err_clean;
+    }
+
+    // fprintf(stderr, "encrypt request:%s", aws_string_c_str(request));
+
+    // if (request_structure->key_id == NULL){
+    // //     // const char *temp = aws_string_c_str(request_structure->key_id);
+    // //     // fprintf(stderr, "key id is %s\n", temp);
+    //     // fprintf(stdout, "GGGGGGGGGGGGGGGGGGG");
+    //     bool temp = aws_string_is_valid(request_structure->key_id);
+    //     fprintf(stderr, "string valid????????%d\n", temp);
+    // }
+
+    rc = s_aws_nitro_enclaves_kms_client_call_blocking(client, kms_target_encrypt, request, &response);
+    if (rc != 200) {
+        fprintf(stderr, "Got non-200 answer from KMS: %d\n", rc);
+        fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
+        fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
+        goto err_clean;
+    }
+
+    fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
+
+    char * ciphertext_tmp = get_ciphertext_from_json(response);
+
+    fprintf(stderr, "cipher_tmp: %s\n", ciphertext_tmp);
+
+    response_structure = aws_kms_encrypt_response_from_json(client->allocator, response);
+
+    if (response_structure == NULL) {
+        fprintf(stderr, "Could not read response from KMS: %d\n", rc);
+        goto err_clean;
+    }
+
+    //rc = aws_byte_buf_init_copy(ciphertext, client->allocator, &ciphertext_tmp);
+
+    fprintf(stderr, "ciphertext: %s\n", (char *) ciphertext->buffer);
+
+    fprintf(stderr, "response ciphertext blob:%s\n", (char *) response_structure->ciphertext_blob.buffer);
+
+    aws_kms_encrypt_request_destroy(request_structure);
+    aws_kms_encrypt_response_destroy(response_structure);
+    aws_string_destroy(request);
+    aws_string_destroy(response);
+    rc = AWS_OP_SUCCESS;
+
+    return ciphertext_tmp;
+err_clean:
+    aws_kms_encrypt_request_destroy(request_structure);
+    aws_kms_encrypt_response_destroy(response_structure);
+    aws_string_destroy(request);
+    aws_string_destroy(response);
+    return NULL;
 }
 
 int aws_kms_generate_data_key_blocking(

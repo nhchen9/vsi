@@ -51,12 +51,9 @@ def get_s3_plaintext(key, bucket=BUCKET):
     return dat
 
 def run_instance(cid, command, data, key):
-    #cid = 59
-    #command = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAH/kuDMzQ3ZvqvctGPXsoVrAAAAhTCBggYJKoZIhvcNAQcGoHUwcwIBADBuBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDI2CbKXhsN9uwyFfsAIBEIBBMnF0R+J+f6uK5tHLI8F6WMcKMqBsCt00G5c8s0Gnf2Fsu7dnJrbX/ykuBiqo/zXNuY2Qy2ZSHevyADbtNYsZmEE="
     docker_client = docker.from_env()
     container = docker_client.containers.run(image='kmstool-instance', network='host', command='/kmstool_instance --cid "{cid}" "{command}" "{data}" "{key}"'.format(cid=cid, data=data, command=command, key=key).replace('"None"', ''), remove = True, stdout = False, stderr = True, detach=False)
     
-    #print(container.logs(stdout=True, stderr=True))
     if len(re.findall('EncData": "(.*?)",', container)) > 0:
         encData = re.findall('EncData": "(.*?)",', container)[0].replace("\\", "")
         encKey = re.findall('KeyPackage": "(.*?)" }', container)[0].replace("\\", "")
@@ -67,8 +64,6 @@ def run_instance(cid, command, data, key):
 
 def num_to_id(i):
     uuid = str(i)
-    #while(len(uuid) < 8):
-    #    uuid = '0'+uuid
     return uuid
 def make_data(users, hist_len):
     dat = {}
@@ -82,6 +77,7 @@ def make_data(users, hist_len):
 
 if __name__ == '__main__':
 
+    # Data and key are stored locally in encrypted format.
     LOCAL_DATA = "./data.txt"
     LOCAL_KEY = "./key.txt"
     cur_data = None
@@ -90,17 +86,10 @@ if __name__ == '__main__':
     encrypted_commands = get_s3_data("encrypted_commands2")
     cmd_list = encrypted_commands.split("\n")
 
-
-    counter = 0
-    s3_data_key = "100000_10.enc"
     session = boto3.session.Session(region_name='us-west-2')
     kms_client = session.client('kms')
 
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
-    query_times = []
-    update_times = []
-    upload_times = []
-    #for cmd in cmd_list:
     for i in range(20):
         cmd = cmd_list[i]
         if i > 0:

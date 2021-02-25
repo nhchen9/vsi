@@ -24,10 +24,11 @@
 #define SERVICE_PORT 3000
 #define PROXY_PORT 8000
 #define BUF_SIZE 8192
+#define MAX_DATA_LEN 10000000
 AWS_STATIC_STRING_FROM_LITERAL(default_region, "us-west-2");
 
-unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
-unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
+//unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
+//unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
 
 
 enum status {
@@ -194,6 +195,7 @@ ssize_t s_write_all(int peer_fd, const char *msg, size_t msg_len) {
     return total_sent;
 }
 
+// Return from enclave to instance with one response
 int s_send_status(int peer_fd, int status, const char *msg) {
     struct json_object *status_object = json_object_new_object();
     if (status_object == NULL) {
@@ -210,6 +212,7 @@ int s_send_status(int peer_fd, int status, const char *msg) {
     return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
 }
 
+// Return from enclave to instance with two responses
 int s_send_data_key(int peer_fd, int status, char * enc_data, char * enc_key) {
     struct json_object *status_object = json_object_new_object();
     if (status_object == NULL) {
@@ -366,19 +369,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
         .endpoint = &endpoint,
         .domain = AWS_SOCKET_VSOCK,
     };
-    /*
-    char cwd [PATH_MAX];
-     if (getcwd(cwd, sizeof(cwd))!=NULL){
-        const char * tmp = "test";
-        fprintf(stderr, tmp);
-        fprintf(stderr, cwd);
-        //rc = s_send_status(peer_fd, STATUS_OK, cwd);
-    }else{
-        const char * tmp = "cwd failed";
-        fprintf(stderr, tmp);
-        //rc = s_send_status(peer_fd, STATUS_OK, tmp);
-    }
-    */
+
     while (true) {
         char *sep = memchr(buf, '\0', buf_idx);
         if (buf_idx == 0 || sep == NULL) {
@@ -492,6 +483,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 struct aws_byte_buf datakey_package_decrypted;
                 rc = aws_kms_decrypt_blocking(client, &cipherkey, &datakey_package_decrypted);
 
+                // key package holds info for encryption - 256B key, 128B iv, 16B tag, length of ciphertext as 32 bit int
                 unsigned char * datakey_package = datakey_package_decrypted.buffer;
                 unsigned char datakey [256];
                 unsigned char iv [128];
@@ -524,7 +516,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 EVP_CIPHER_CTX *ctx;
                 int outlen, rv;
-                unsigned char plaintext[1000000];
+                unsigned char plaintext[MAX_DATA_LEN];
                 fprintf(stderr, "AES GCM Decrypt:\n");
                 fprintf(stderr, "Ciphertext:\n");
                 fprintf(stderr, "%s\n", ciphertext);
@@ -553,18 +545,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fprintf(stderr, "Tag Verify %s\n", rv > 0 ? "Successful!" : "Failed!");
                 EVP_CIPHER_CTX_free(ctx);
 
-                /*
-                char plaintext [1000000];
-                memset(plaintext, 0, sizeof(plaintext));
-
-                fprintf(stderr, "\nencrypt length: %d\n", (int) ciphertext.len);
-
-                int db = decrypt(ciphertext.buffer, ciphertext.len, (unsigned char *) datakey, (unsigned char *) iv, (unsigned char *) plaintext);
-                fprintf(stderr, "decrypted %d\n", db);
-                */
-
-                // struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str((char *) plaintext);
-
                 data_json = json_tokener_parse((char *) plaintext);
 
             }
@@ -585,9 +565,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
             if (strstr((char *) command_decrypted.buffer, " ")!= NULL){
-                // data update
-                // returns hash of updated data
-                //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"update");
                 char * command_string = (char *) command_decrypted.buffer;
                 char * uuid = strtok(command_string, " ");
                 char * test = strtok(NULL, " ");
@@ -619,14 +596,12 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 for ( int i = 0 ; i < 128 ; i++ ){
                     iv[i] = iv[256 + i]%90 + 33;
                 }
-
-
                 
                 fprintf(stderr, "\n new key: %s\n", (char *) key);
                 fprintf(stderr, "\n new iv: %s\n", (char *) iv);
 
                 const char * ret_plaintext = json_object_get_string(data_json);
-                unsigned char reencrypted_data [1000000];
+                unsigned char reencrypted_data [MAX_DATA_LEN];
                 int cipherlen;
                 int outlen;
                 int tag_size = 16;
@@ -665,14 +640,14 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 fprintf(stderr, "encoded reencrypted %s\n", (char *) encoded_reencrypted_data.buffer);
 
-
-                // key package holds info for encryption - key, iv, tag, length of ciphertext as 32 bit int
+                // key package holds info for encryption - 256B key, 128B iv, 16B tag, length of ciphertext as 32 bit int
                 unsigned char keypackage [256 + 128 + 16 + 4];
                 memset(keypackage, 0, sizeof(keypackage));
                 memcpy(keypackage, key, 256);
                 memcpy(keypackage + 256, iv, 128);
                 memcpy(keypackage + 256 + 128, tag, 16);
 
+                // Storing length of ciphertext in key package as 32-bit int.  Necessary for decryption.
                 keypackage[256 + 128 + 16] = (cipherlen >> 24) & 0xFF;
                 keypackage[256 + 128 + 16 + 1] = (cipherlen >> 16) & 0xFF;
                 keypackage[256 + 128 + 16 + 2] = (cipherlen >> 8) & 0xFF;
@@ -692,19 +667,9 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 break_on(rc <= 0);
 
             }else{
-                // status query
-                // returns 0 or 1 for low and high risk respectively
-                //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query");
                 struct json_object *command_obj = json_object_object_get(data_json, (char *) command_decrypted.buffer);
                 const char * test_hist = json_object_get_string(command_obj);
-                //const char * data_string = json_object_get_string(data_json);
-                printf("TESTING TESTING 380");
-                printf((char *) command_decrypted.buffer);
-                printf("TESTING TESTING 382");
-                printf((char *) test_hist);
-                printf("TESTING TESTING 384");
-                //rc = s_send_status(peer_fd, STATUS_OK, (char *) test_hist);
-                //rc = s_send_status(peer_fd, STATUS_OK, data_string);
+);
                 if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
                     rc = s_send_status(peer_fd, STATUS_OK, "1");
                 }
@@ -713,19 +678,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 }
                 rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");
             }
-
-            //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
-            /* Send back result. */
-            /*
-            if (ciphertext_decrypted.len < 2 || strcmp((const char *)ciphertext_decrypted.buffer + ciphertext_decrypted.len - 2, "11")==0){
-                rc = s_send_status(peer_fd, STATUS_OK, "1");
-            }
-            else{
-                rc = s_send_status(peer_fd, STATUS_OK, "0");
-            }
-            */
-            //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
-            //aws_byte_buf_clean_up(&ciphertext_decrypted_b64); 
             break_on(rc <= 0);
         } else {
             rc = s_send_status(peer_fd, STATUS_ERR, "Operation not recognized");
@@ -767,7 +719,6 @@ int main(int argc, char **argv) {
         }
         closedir(d);
     }
-    fprintf(stderr, "MESSAGE PRINTING TEST AOLDKCMADLCCMKL:");
     char cwd [PATH_MAX];
     if (getcwd(cwd, sizeof(cwd))!=NULL){
         const char * tmp = "test";

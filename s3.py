@@ -159,6 +159,6 @@ if __name__ == '__main__':
     encrypted_commands_str = "\n".join(encrypted_commands)
     key = "encrypted_commands2"
     upload_file(key, encrypted_commands_str)
-
+    open("encrypted_commands.txt","wt").write(encrypted_commands_str)
     print(encrypted_commands_str)
     

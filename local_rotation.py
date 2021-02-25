@@ -83,12 +83,14 @@ if __name__ == '__main__':
     cur_data = None
     cur_key = None
 
-    encrypted_commands = get_s3_data("encrypted_commands2")
+    #encrypted_commands = get_s3_data("encrypted_commands2")
+    encrypted_commands = open("encrypted_commands.txt", "rt").read()
     cmd_list = encrypted_commands.split("\n")
 
     session = boto3.session.Session(region_name='us-west-2')
     kms_client = session.client('kms')
 
+    #Local file with plaintext commands, for reference
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
     for i in range(20):
         cmd = cmd_list[i]
@@ -99,9 +101,12 @@ if __name__ == '__main__':
         
         print(plain_cmd_ref[i])
         
+        #hardcoded enclave cid to be 5... set with "--enclave-cid 5" or replace with actual cid
         encData, encKey, qResult = run_instance(5, cmd, cur_data, cur_key)
         if encData:
+            #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)
         else:
+            #If status query, print result
             print(qResult)

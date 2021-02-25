@@ -23,11 +23,11 @@
 #include <dirent.h> 
 #define SERVICE_PORT 3000
 #define PROXY_PORT 8000
-#define BUF_SIZE 2000000
+#define BUF_SIZE 8192
 AWS_STATIC_STRING_FROM_LITERAL(default_region, "us-west-2");
 
-//unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
-//unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
+unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
+unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
 
 
 enum status {
@@ -482,15 +482,8 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             struct json_object *data_json = NULL;
 
             if (ciphertext_obj == NULL){
-                /**
-                * If no dataset, initialized empty JSON
-                */
                 data_json = json_tokener_parse("{}");
             }else{
-
-                /**
-                * Start by KMS Decrypting the AES-GCM data key package
-                */
 
                 fprintf(stderr, json_object_get_string(datakey_obj));
                 
@@ -499,7 +492,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 struct aws_byte_buf datakey_package_decrypted;
                 rc = aws_kms_decrypt_blocking(client, &cipherkey, &datakey_package_decrypted);
 
-                // key package holds info for encryption - 256B key, 128B iv, 16B tag, length of ciphertext as 32 bit int
                 unsigned char * datakey_package = datakey_package_decrypted.buffer;
                 unsigned char datakey [256];
                 unsigned char iv [128];
@@ -518,10 +510,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fprintf(stderr, "KMS Decrypted data key: %s\n", (char *) datakey);
                 fprintf(stderr, "KMS Decrypted data iv: %s\n", (char *) iv);
                 fprintf(stderr, "KMS Decrypted data length: %d\n", cipherlen);
-
-                /**
-                * Use data key to decrypt test result data
-                */
                 
                 const char * b64_cipher_const = json_object_get_string(ciphertext_obj);
                 char b64_ciphertext [strlen(b64_cipher_const)];
@@ -536,7 +524,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 EVP_CIPHER_CTX *ctx;
                 int outlen, rv;
-                unsigned char plaintext[BUF_SIZE];
+                unsigned char plaintext[1000000];
                 fprintf(stderr, "AES GCM Decrypt:\n");
                 fprintf(stderr, "Ciphertext:\n");
                 fprintf(stderr, "%s\n", ciphertext);
@@ -562,16 +550,24 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 * Print out return value. If this is not successful authentication
                 * failed and plaintext is not trustworthy.
                 */
-                fail_on(rv <= 0, loop_next_err, "Tag wrong");
+                fprintf(stderr, "Tag Verify %s\n", rv > 0 ? "Successful!" : "Failed!");
                 EVP_CIPHER_CTX_free(ctx);
+
+                /*
+                char plaintext [1000000];
+                memset(plaintext, 0, sizeof(plaintext));
+
+                fprintf(stderr, "\nencrypt length: %d\n", (int) ciphertext.len);
+
+                int db = decrypt(ciphertext.buffer, ciphertext.len, (unsigned char *) datakey, (unsigned char *) iv, (unsigned char *) plaintext);
+                fprintf(stderr, "decrypted %d\n", db);
+                */
+
+                // struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str((char *) plaintext);
 
                 data_json = json_tokener_parse((char *) plaintext);
 
             }
-
-            /**
-             * KMS Decrypt the encrypted command
-             */
 
             struct json_object *command_obj = json_object_object_get(object, "command");
 
@@ -589,11 +585,9 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
             if (strstr((char *) command_decrypted.buffer, " ")!= NULL){
-                // Data update command (distinguished by two arguments)
-
-                /**
-                 * Update JSON with new user test result
-                 */
+                // data update
+                // returns hash of updated data
+                //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"update");
                 char * command_string = (char *) command_decrypted.buffer;
                 char * uuid = strtok(command_string, " ");
                 char * test = strtok(NULL, " ");
@@ -612,7 +606,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 json_object_object_add(data_json, uuid, json_object_new_string(cat_buff));
 
 
-                // Generate random data key
+                //RANDOM KEYGEN AND ENCRYPTION
 
                 unsigned char rand_key[256 + 128];
                 unsigned char key[256];
@@ -631,11 +625,8 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fprintf(stderr, "\n new key: %s\n", (char *) key);
                 fprintf(stderr, "\n new iv: %s\n", (char *) iv);
 
-                /**
-                 * Encrypt updated data by AES-GCM with newly generated key
-                 */
                 const char * ret_plaintext = json_object_get_string(data_json);
-                unsigned char reencrypted_data [BUF_SIZE];
+                unsigned char reencrypted_data [1000000];
                 int cipherlen;
                 int outlen;
                 int tag_size = 16;
@@ -675,17 +666,13 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fprintf(stderr, "encoded reencrypted %s\n", (char *) encoded_reencrypted_data.buffer);
 
 
-                /**
-                 * Construct new key package
-                 * key package holds info for encryption - 256B key, 128B iv, 16B tag, length of ciphertext as 32 bit int
-                 */
+                // key package holds info for encryption - key, iv, tag, length of ciphertext as 32 bit int
                 unsigned char keypackage [256 + 128 + 16 + 4];
                 memset(keypackage, 0, sizeof(keypackage));
                 memcpy(keypackage, key, 256);
                 memcpy(keypackage + 256, iv, 128);
                 memcpy(keypackage + 256 + 128, tag, 16);
 
-                // Storing length of ciphertext in key package as 32-bit int.  Necessary for decryption.
                 keypackage[256 + 128 + 16] = (cipherlen >> 24) & 0xFF;
                 keypackage[256 + 128 + 16 + 1] = (cipherlen >> 16) & 0xFF;
                 keypackage[256 + 128 + 16 + 2] = (cipherlen >> 8) & 0xFF;
@@ -693,9 +680,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 fprintf(stderr, "%s\n", (char *) keypackage);
 
-                /**
-                 * KMS Encrypt key package
-                 */
                 struct aws_byte_buf dec_key = aws_byte_buf_from_array((void *) keypackage, 256 + 128 + 16 + 4);
                 struct aws_byte_buf enc_key;
 
@@ -703,20 +687,24 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
 
-                // Return 1. AES-GCM encrypted, updated data and 2. KMS encypted AES-GCM data key package to the host instance
                 rc = s_send_data_key(peer_fd, STATUS_OK, (char *) encoded_reencrypted_data.buffer, (char *) enc_key.buffer);
 
                 break_on(rc <= 0);
 
             }else{
-                /**
-                 * Status query command
-                 */
+                // status query
+                // returns 0 or 1 for low and high risk respectively
+                //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query");
                 struct json_object *command_obj = json_object_object_get(data_json, (char *) command_decrypted.buffer);
                 const char * test_hist = json_object_get_string(command_obj);
-
-                // Currently, we return a binary risk assessment - 0 if two negative tests, otherwise 1
-                // This can be expanded - return a continuous value by complex analysis a user's test history or additional data added to the dataset.
+                //const char * data_string = json_object_get_string(data_json);
+                printf("TESTING TESTING 380");
+                printf((char *) command_decrypted.buffer);
+                printf("TESTING TESTING 382");
+                printf((char *) test_hist);
+                printf("TESTING TESTING 384");
+                //rc = s_send_status(peer_fd, STATUS_OK, (char *) test_hist);
+                //rc = s_send_status(peer_fd, STATUS_OK, data_string);
                 if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
                     rc = s_send_status(peer_fd, STATUS_OK, "1");
                 }
@@ -725,6 +713,19 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 }
                 rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");
             }
+
+            //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
+            /* Send back result. */
+            /*
+            if (ciphertext_decrypted.len < 2 || strcmp((const char *)ciphertext_decrypted.buffer + ciphertext_decrypted.len - 2, "11")==0){
+                rc = s_send_status(peer_fd, STATUS_OK, "1");
+            }
+            else{
+                rc = s_send_status(peer_fd, STATUS_OK, "0");
+            }
+            */
+            //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
+            //aws_byte_buf_clean_up(&ciphertext_decrypted_b64); 
             break_on(rc <= 0);
         } else {
             rc = s_send_status(peer_fd, STATUS_ERR, "Operation not recognized");
@@ -756,6 +757,28 @@ exit_clean_json:
 int main(int argc, char **argv) {
     int rc = 0;
     struct app_ctx app_ctx;
+
+    DIR *d;
+    struct dirent *dir;
+    d = opendir("./home/");
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+        printf("%s\n", dir->d_name);
+        }
+        closedir(d);
+    }
+    fprintf(stderr, "MESSAGE PRINTING TEST AOLDKCMADLCCMKL:");
+    char cwd [PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd))!=NULL){
+        const char * tmp = "test";
+        fprintf(stderr, tmp);
+        fprintf(stderr, cwd);
+        //rc = s_send_status(peer_fd, STATUS_OK, cwd);
+    }else{
+        const char * tmp = "cwd failed";
+        fprintf(stderr, tmp);
+        //rc = s_send_status(peer_fd, STATUS_OK, tmp);
+    }
 
     /* Initialize the SDK */
     aws_nitro_enclaves_library_init(NULL);

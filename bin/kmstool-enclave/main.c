@@ -492,17 +492,24 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 struct aws_byte_buf datakey_package_decrypted;
                 rc = aws_kms_decrypt_blocking(client, &cipherkey, &datakey_package_decrypted);
 
-                unsigned char datakey [257];
-                unsigned char iv [129];
-                
-                datakey[256] = '\0';
-                iv[128] = '\0';
+                unsigned char * datakey_package = datakey_package_decrypted.buffer;
+                unsigned char datakey [256];
+                unsigned char iv [128];
+                unsigned char tag [16];
+                int cipherlen = 0;
+
+                cipherlen += datakey_package[256 + 128 + 16] << 24;
+                cipherlen += datakey_package[256 + 128 + 16 + 1] << 16;
+                cipherlen += datakey_package[256 + 128 + 16 + 2] << 8;
+                cipherlen += datakey_package[256 + 128 + 16 + 3];
 
                 memcpy(datakey, (char *) datakey_package_decrypted.buffer, 256);
                 memcpy(iv, ((char*) datakey_package_decrypted.buffer) + 256, 128);
+                memcpy(tag, ((char*) datakey_package_decrypted.buffer) + 256 + 128, 16);
 
                 fprintf(stderr, "KMS Decrypted data key: %s\n", (char *) datakey);
                 fprintf(stderr, "KMS Decrypted data iv: %s\n", (char *) iv);
+                fprintf(stderr, "KMS Decrypted data length: %d\n", cipherlen);
                 
                 const char * b64_cipher_const = json_object_get_string(ciphertext_obj);
                 char b64_ciphertext [strlen(b64_cipher_const)];
@@ -511,8 +518,42 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 fprintf(stderr, "\nb64 cipher: %s\n", b64_ciphertext);
 
-                struct aws_byte_buf ciphertext = b64_decode(app_ctx, b64_ciphertext);
+                struct aws_byte_buf ciphertext_buf = b64_decode(app_ctx, b64_ciphertext);
 
+                unsigned char * ciphertext = ciphertext_buf.buffer;
+
+                EVP_CIPHER_CTX *ctx;
+                int outlen, rv;
+                unsigned char plaintext[1000000];
+                fprintf(stderr, "AES GCM Decrypt:\n");
+                fprintf(stderr, "Ciphertext:\n");
+                fprintf(stderr, "%s\n", ciphertext);
+                ctx = EVP_CIPHER_CTX_new();
+                /* Select cipher */
+                EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL);
+                /* Set IV length, omit for 96 bits */
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, sizeof(iv), NULL);
+                /* Specify key and IV */
+                EVP_DecryptInit_ex(ctx, NULL, NULL, datakey, iv);
+                /* Decrypt plaintext */
+                fprintf(stderr, "%d\n", cipherlen);
+                EVP_DecryptUpdate(ctx, plaintext, &outlen, ciphertext, cipherlen);
+                /* Output decrypted block */
+                printf("Plaintext:\n");
+                fprintf(stderr, "%s\n", plaintext);
+                /* Set expected tag value. */
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, sizeof(tag),
+                                    (void *)tag);
+                /* Finalise: note get no output for GCM */
+                rv = EVP_DecryptFinal_ex(ctx, plaintext, &outlen);
+                /*
+                * Print out return value. If this is not successful authentication
+                * failed and plaintext is not trustworthy.
+                */
+                fprintf(stderr, "Tag Verify %s\n", rv > 0 ? "Successful!" : "Failed!");
+                EVP_CIPHER_CTX_free(ctx);
+
+                /*
                 char plaintext [1000000];
                 memset(plaintext, 0, sizeof(plaintext));
 
@@ -520,9 +561,11 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
                 int db = decrypt(ciphertext.buffer, ciphertext.len, (unsigned char *) datakey, (unsigned char *) iv, (unsigned char *) plaintext);
                 fprintf(stderr, "decrypted %d\n", db);
-                struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str(plaintext);
+                */
 
-                data_json = json_tokener_parse((char *)ciphertext_decrypted.buffer);
+                // struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str((char *) plaintext);
+
+                data_json = json_tokener_parse((char *) plaintext);
 
             }
 
@@ -541,11 +584,11 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             if (data_json == NULL){
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
-            if (strstr((char *)command_decrypted.buffer, " ")!= NULL){
+            if (strstr((char *) command_decrypted.buffer, " ")!= NULL){
                 // data update
                 // returns hash of updated data
                 //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"update");
-                char * command_string = (char *)command_decrypted.buffer;
+                char * command_string = (char *) command_decrypted.buffer;
                 char * uuid = strtok(command_string, " ");
                 char * test = strtok(NULL, " ");
                 
@@ -562,52 +605,82 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 }
                 json_object_object_add(data_json, uuid, json_object_new_string(cat_buff));
 
-                
+
                 //RANDOM KEYGEN AND ENCRYPTION
 
                 unsigned char rand_key[256 + 128];
-                unsigned char key[257];
+                unsigned char key[256];
                 RAND_bytes(rand_key, 256 + 128);
                 for ( int i = 0 ; i < 256 ; i++ ){
                     key[i] = rand_key[i]%90 + 33;
                 }
-                key[256] = '\0';
 
-                unsigned char iv[129];
+                unsigned char iv[128];
                 for ( int i = 0 ; i < 128 ; i++ ){
                     iv[i] = iv[256 + i]%90 + 33;
                 }
-                iv[128] = '\0';
+
+
                 
                 fprintf(stderr, "\n new key: %s\n", (char *) key);
                 fprintf(stderr, "\n new iv: %s\n", (char *) iv);
 
-                const char * res = json_object_get_string(data_json);
-                unsigned char copy_res [strlen(res)+1];
-                copy_res[strlen(res)] = '\0';
-                memcpy(copy_res, res, strlen(res));
+                const char * ret_plaintext = json_object_get_string(data_json);
                 unsigned char reencrypted_data [1000000];
-                memset(reencrypted_data, 0, sizeof(reencrypted_data));
-                fprintf(stderr, "%s\n", (char *) res);
+                int cipherlen;
+                int outlen;
+                int tag_size = 16;
+                unsigned char tag [tag_size];
+                EVP_CIPHER_CTX *ctx;
+                fprintf(stderr, "AES GCM Encrypt:\n");
+                fprintf(stderr, "Plaintext:\n");
+                fprintf(stderr, "%s\n", ret_plaintext);
+                ctx = EVP_CIPHER_CTX_new();
+                /* Set cipher type and mode */
+                EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, NULL, NULL);
+                /* Set IV length if default 96 bits is not appropriate */
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, sizeof(iv), NULL);
+                /* Initialise key and IV */
+                EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv);
+                /* Encrypt plaintext */
+                EVP_EncryptUpdate(ctx, reencrypted_data, &outlen, (unsigned char *) ret_plaintext, strlen(ret_plaintext));
+                /* Output encrypted block */
+                fprintf(stderr, "Ciphertext:\n");
+                cipherlen = outlen;
+                fprintf(stderr, "%s\n", reencrypted_data);
+                
+                /* Finalise: note get no output for GCM */
+                EVP_EncryptFinal_ex(ctx, reencrypted_data, &outlen);
+                
+                /* Get tag */
+                EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, tag_size, tag);
+                /* Output tag */
+                fprintf(stderr, "Tag:\n");
+                fprintf(stderr, "%s\n", tag);
+                EVP_CIPHER_CTX_free(ctx);
 
-                int eb = encrypt(copy_res, strlen(res), key, iv, reencrypted_data);
-                fprintf(stderr, "\nencrypt length: %d\n", eb);
-
-                unsigned char buf [1000];
-                memset(buf, 0, sizeof(buf));
                 fprintf(stderr, "%s\n", (char *) reencrypted_data);
 
-                struct aws_byte_buf encoded_reencrypted_data = b64_encode(app_ctx, reencrypted_data, eb); // base 64 encrypted data
+                struct aws_byte_buf encoded_reencrypted_data = b64_encode(app_ctx, reencrypted_data, cipherlen); // base 64 encrypted data
 
                 fprintf(stderr, "encoded reencrypted %s\n", (char *) encoded_reencrypted_data.buffer);
 
-                unsigned char keypackage [strlen((char*)key) + strlen((char*)iv)];
+
+                // key package holds info for encryption - key, iv, tag, length of ciphertext as 32 bit int
+                unsigned char keypackage [256 + 128 + 16 + 4];
                 memset(keypackage, 0, sizeof(keypackage));
-                memcpy(keypackage, key, strlen((char *) key));
-                strcat((char *) keypackage, (char *) iv);
+                memcpy(keypackage, key, 256);
+                memcpy(keypackage + 256, iv, 128);
+                memcpy(keypackage + 256 + 128, tag, 16);
+
+                keypackage[256 + 128 + 16] = (cipherlen >> 24) & 0xFF;
+                keypackage[256 + 128 + 16 + 1] = (cipherlen >> 16) & 0xFF;
+                keypackage[256 + 128 + 16 + 2] = (cipherlen >> 8) & 0xFF;
+                keypackage[256 + 128 + 16 + 3] = (cipherlen) & 0xFF;
+
                 fprintf(stderr, "%s\n", (char *) keypackage);
 
-                struct aws_byte_buf dec_key = aws_byte_buf_from_c_str((char *) keypackage);
+                struct aws_byte_buf dec_key = aws_byte_buf_from_array((void *) keypackage, 256 + 128 + 16 + 4);
                 struct aws_byte_buf enc_key;
 
                 enc_key = aws_byte_buf_from_c_str(aws_kms_encrypt_get_cipher(client, &dec_key, &enc_key));  // base 64 encrypted key

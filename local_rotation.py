@@ -14,7 +14,7 @@ import requests
 import sys
 import hashlib
 import os
-KMS_KEY_ARN = 'arn:aws:kms:us-west-2:269163721785:key/f12133ea-b6ac-4cff-89ad-8b1145b4a8bc'
+KMS_KEY_ARN = 'arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946'
 BUCKET = 'enclave-testing-721f5e9d-2b0c-46b7-8128-411a764cb8de'
 ENCLAVE_CID = '26'
 def upload_file(key, text, bucket=BUCKET):
@@ -174,7 +174,7 @@ if __name__ == '__main__':
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)
-        else:
+        if qResult:
             #If status query, print result
             print(qResult)
 			

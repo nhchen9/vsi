@@ -28,7 +28,7 @@
 #include <unistd.h>
 #include <dirent.h> 
 #define SERVICE_PORT 3000
-#define PROXY_PORT 9000
+#define PROXY_PORT 8000
 #define BUF_SIZE 8192
 AWS_STATIC_STRING_FROM_LITERAL(default_region, "us-west-2");
 

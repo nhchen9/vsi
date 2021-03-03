@@ -69,6 +69,6 @@ if __name__ == '__main__':
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)
-        else:
+        if qResult:
             #If status query, print result
             print(qResult)

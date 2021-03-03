@@ -11,44 +11,6 @@ from multiprocessing import Process
 import re
 import numpy as np
 KMS_KEY_ARN = 'arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946'
-BUCKET = 'enclave-testing-721f5e9d-2b0c-46b7-8128-411a764cb8de'
-ENCLAVE_CID = '26'
-def upload_file(key, text, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    data = {'encrypted_data': text}
-    serialized = json.dumps(data)
-    try:
-        response = s3_client.put_object(Bucket=bucket, Key=key, Body=bytes(serialized.encode('utf-8')))
-    except ClientError as e:
-        logging.error(e)
-        return False
-    return True
-
-def get_s3_data(key, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        ciphertext = json.loads(response['Body'].read())['encrypted_data']
-    except ClientError as e:
-        #logging.error(e)
-        return False
-    return ciphertext
-
-def get_s3_plaintext(key, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        dat = response['Body'].read()
-    except ClientError as e:
-        #logging.error(e)
-        return False
-    return dat
 
 def run_instance(cid, command, data, key):
     docker_client = docker.from_env()

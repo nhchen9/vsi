@@ -600,12 +600,12 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 
                 
 
-                struct json_object *command_obj = json_object_object_get(data_json, uuid);
+                struct json_object *current_data = json_object_object_get(data_json, uuid);
                 char cat_buff[BUF_SIZE];
-                if (command_obj == NULL){
+                if (current_data == NULL){
                     strcpy(cat_buff, test);
                 }else{
-                    const char * test_hist = json_object_get_string(command_obj);
+                    const char * test_hist = json_object_get_string(current_data);
                     strcpy(cat_buff, test_hist);
                     strncat(cat_buff, test, 1);
                 }

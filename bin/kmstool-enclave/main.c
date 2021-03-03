@@ -18,13 +18,167 @@
 #include <openssl/x509.h>
 #include <openssl/rand.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <openssl/sha.h>
+#include <stdint.h>
+#include <string.h>
+
 #include <errno.h>
 #include <unistd.h>
 #include <dirent.h> 
 #define SERVICE_PORT 3000
-#define PROXY_PORT 8000
+#define PROXY_PORT 9000
 #define BUF_SIZE 8192
 AWS_STATIC_STRING_FROM_LITERAL(default_region, "us-west-2");
+
+// Dummy inputHash Values to test verification without going through CCF
+char *buffer = "A07CD577627D23165C8C92AD91E0AF0D403889E4004992D7425D3BF24FBB5126";
+char *buffer_ct = "A07CD577627D23165C8C92AD91E0AF0D403889E4004992D7425D3BF24FBB51260";
+
+// Dummy signature on inputHash+counter to test verification
+char *dsignature = "Uv2Mj+OwFTypR60vmpk8xjmqcBLaSssrK0UI4Hg4uH+s9ZNY49EnZI5kFNnRQmGKJ+VzK8eRZq1uMTRnNqaTvFuye0UNqP0yKo1KSy1/Hn/udsBxU5Fp1dkuSaPR+gBccrFoQOGu057YT/w40bBwIE0SJbri4hJTiRpVF+H99cMjJxrlBAG+ovUIxyocYegLATL9lKxVYke68QT/A6QdOtTaUDPFwJ/kRByDpOIWZjbzsEScZtyX5WAHPri28XZ/4KWE5mmEpUEE4sMbzUeTCqSuevMnY6hLp1WZGgIhOGSMknuBVEke1NYZVnrRznA1yKd/0ypBbyl3s5D/SZX90w=="; 
+
+
+// CCF Public Key - hardcoded in enclave image
+char *pem_key_buffer = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr2PWtqKkhlwaFNOwoxSh\n5JtfJrev6NQt7OmwrsxiW4EBSvX3vVVr1uh8UGttNrRbkztGJvovVTXmPhgIpKlv\ne0t2TyzUAomUMkCAT3m1B7SS7z3T3backZm+veZ1mI/jYI88yrRo3N4UxgzKjBZ3\nOTP1nUFmFray1ZrTZT7U5G+5RNN/KidapMdo3ZMsJkcjNrZNG/LPFP35/gK8c9Qg\nJZmVF1YBL2MS5gf2cUj2JHtY+ghfH6B4RdijzPyGaN2pK4ZtLMu8MZFSffXFGgkW\ngajCG2gDA3W9A1A6KguAjg4rxPCRiOqRIhhBVjiKvbfYk4F9Hkf7/28s4zpSSRYq\n4QIDAQAB\n-----END PUBLIC KEY-----\n";   
+
+// Given size of an raw input buffer (N = inlen bytes) compute size of cooresponding base64 encoded buffer -> ceil(4(N/3), 4 bytes)
+size_t b64_encoded_size(size_t inlen)
+{
+	size_t ret;
+
+	ret = inlen;
+	if (inlen % 3 != 0)
+		ret += 3 - (inlen % 3);
+	ret /= 3;
+	ret *= 4;
+
+	return ret;
+}
+
+// Given a null-terminated/'='padded base64 encoded buffer compute the size of the decoded raw buffer in bytes
+size_t b64_decoded_size(const char *in)
+{
+	size_t len;
+	size_t ret;
+	size_t i;
+
+	if (in == NULL)
+		return 0;
+
+	len = strlen(in);
+	ret = len / 4 * 3;
+
+	for (i=len; i-->0; ) {
+		if (in[i] == '=') {
+			ret--;
+		} else {
+			break;
+		}
+	}
+
+	return ret;
+}
+
+// Useful arrays for computing base64 encode and decode
+const char b64chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+int b64invs[] = { 62, -1, -1, -1, 63, 52, 53, 54, 55, 56, 57, 58,
+	59, 60, 61, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5,
+	6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+	21, 22, 23, 24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28,
+	29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42,
+	43, 44, 45, 46, 47, 48, 49, 50, 51 };
+
+// Determine if a char is a valid base64 encoded char
+int b64_isvalidchar(char c)
+{
+	if (c >= '0' && c <= '9')
+		return 1;
+	if (c >= 'A' && c <= 'Z')
+		return 1;
+	if (c >= 'a' && c <= 'z')
+		return 1;
+	if (c == '+' || c == '/' || c == '=')
+		return 1;
+	return 0;
+}
+
+// Decode a base64 encoded input buffer, pre-compute expected outlen and writes to array given by "out", returns 1 on success and 0 on error conditions
+int c_b64_decode(const char *in, unsigned char *out, size_t outlen)
+{
+	size_t len;
+	size_t i;
+	size_t j;
+	int    v;
+
+	if (in == NULL || out == NULL)
+		return 0;
+
+	len = strlen(in);
+	if (outlen < b64_decoded_size(in) || len % 4 != 0)
+		return 0;
+
+	for (i=0; i<len; i++) {
+		if (!b64_isvalidchar(in[i])) {
+			return 0;
+		}
+	}
+
+	for (i=0, j=0; i<len; i+=4, j+=3) {
+		v = b64invs[in[i]-43];
+		v = (v << 6) | b64invs[in[i+1]-43];
+		v = in[i+2]=='=' ? v << 6 : (v << 6) | b64invs[in[i+2]-43];
+		v = in[i+3]=='=' ? v << 6 : (v << 6) | b64invs[in[i+3]-43];
+
+		out[j] = (v >> 16) & 0xFF;
+		if (in[i+2] != '=')
+			out[j+1] = (v >> 8) & 0xFF;
+		if (in[i+3] != '=')
+			out[j+2] = v & 0xFF;
+	}
+
+	return 1;
+}
+
+// Encode into base64 a raw input string "in" of size "len" bytes, return char array of encoded result. CAUTION: freeing of malloced output buffer is on the caller
+char *c_b64_encode(const unsigned char *in, size_t len)
+{
+	char   *out;
+	size_t  elen;
+	size_t  i;
+	size_t  j;
+	size_t  v;
+
+	if (in == NULL || len == 0)
+		return NULL;
+
+	elen = b64_encoded_size(len);
+	out  = malloc(elen+1);
+	out[elen] = '\0';
+
+	for (i=0, j=0; i<len; i+=3, j+=4) {
+		v = in[i];
+		v = i+1 < len ? v << 8 | in[i+1] : v << 8;
+		v = i+2 < len ? v << 8 | in[i+2] : v << 8;
+
+		out[j]   = b64chars[(v >> 18) & 0x3F];
+		out[j+1] = b64chars[(v >> 12) & 0x3F];
+		if (i+1 < len) {
+			out[j+2] = b64chars[(v >> 6) & 0x3F];
+		} else {
+			out[j+2] = '=';
+		}
+		if (i+2 < len) {
+			out[j+3] = b64chars[v & 0x3F];
+		} else {
+			out[j+3] = '=';
+		}
+	}
+
+	return out;
+}
+
 
 unsigned char * HARD_DATAKEY = (unsigned char *) "Deeplearningisnotoriouslyreferredtoasablackboxtechnique,andwithreasonablecause.WhiletraditionalstatisticallearningmethodslikeregressionandBayesianmodelinghelpresearchersdrawdirectconnectionsbetweenfeaturesandpredictions,deepneuralnetworksrequirecomplexcomp";
 unsigned char * HARD_IV = (unsigned char *) "ositionsofmanytomanyfunctions.Layeredarchitecturesenableuniversalapproximationbutmakeitdifficulttorecognizeandreacttocostlymista";
@@ -227,6 +381,26 @@ int s_send_data_key(int peer_fd, int status, char * enc_data, char * enc_key) {
         json_object_object_add(status_object, "KeyPackage", json_object_new_string(enc_key));
     }
 
+    const char *status_str = json_object_to_json_string(status_object);
+    return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
+}
+
+int s_send_hash(int peer_fd, int status, char * hash) {
+    struct json_object *status_object = json_object_new_object();
+    if (status_object == NULL) {
+        return -1;
+    }
+
+    json_object_object_add(status_object, "Status", json_object_new_string(status == STATUS_OK ? "Ok" : "Error"));
+
+    if (hash != NULL) {
+        json_object_object_add(status_object, "Hash", json_object_new_string(hash));
+        fprintf(stderr, "GOT HASH\n");
+    }
+    else {
+        fprintf(stderr, "NO HASH\n");
+    }
+    
     const char *status_str = json_object_to_json_string(status_object);
     return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
 }
@@ -464,7 +638,63 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
              */
 
             fail_on(client == NULL, loop_next_err, "Client not initialized");
+            
+			// Verify the signature and content from CCF
+			// 1) Is this a valid signature based on public key? if not send STATUS "[CCF] Invalid Signature"
+			// 2) Is this a signed signature of the inputHash = hash(encrypted_dataset, encrypted_cmd, 1)? if not send STATUS "[CCF] Invalid InputHash"
+			// 3) Is the CCF counter == total_counter? if not send STATUS "[CCF] Mismatch Counter" 
+			// else if all checks pass send STATUS "[CCF] Signature Verified!"
+            /*struct json_object *sig_jobj = json_object_object_get(object, "signature");
+            if (sig_jobj != NULL) {
+				
+               	fprintf(stderr, "Start Verification of Signature");       
+				
+				struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
+				struct json_object *datakey_obj = json_object_object_get(object, "data_key");
+				
+				fail_on(datakey_obj == NULL || ciphertext_obj == NULL, loop_next_err, "Ciphertext needs data key");
+				
+                // TODO: buffer_ct is hardcoded, compute buffer_ct = hash(dataset + cmds) || current_counter
+                unsigned char digest[SHA256_DIGEST_LENGTH];
+                SHA256_CTX ctx;
+                SHA256_Init(&ctx);
+                SHA256_Update(&ctx, buffer_ct, 65);
+                SHA256_Final(digest, &ctx);
 
+                BIO *bufio;
+                bufio = BIO_new_mem_buf((char*)pem_key_buffer, strlen(pem_key_buffer));
+                RSA* rsa_pubkey =  PEM_read_bio_RSA_PUBKEY(bufio, NULL, NULL, NULL);
+                
+                const char* signa = json_object_get_string(sig);
+                char *out;
+                size_t out_len;  
+                out_len = b64_decoded_size(signature)+1;
+                out = malloc(out_len);
+                if (!c_b64_decode(signa, (unsigned char *)out, out_len)) {
+                    fprintf(stderr, signa); 
+                    rc = s_send_status(peer_fd, STATUS_ERR, signa); 
+                }
+                out[out_len] = '\0';
+
+                int result = RSA_verify(NID_sha256, digest, SHA256_DIGEST_LENGTH, (const unsigned char *) out, 256, rsa_pubkey);
+
+                RSA_free(rsa_pubkey);  
+                BIO_free(bufio);
+
+                if(result == 1)
+                {
+                    rc = s_send_status(peer_fd, STATUS_OK, "Signature Valid");  
+                }
+                else
+                {
+                    rc = s_send_status(peer_fd, STATUS_ERR, "Signature NOT Valid");   
+                }
+
+            }
+            else {
+                rc = s_send_status(peer_fd, STATUS_OK, "NO Signature");
+            }*/
+            
             /*
              1. Decrypt data key
                 If no key, assert no data.  If neither, create new data.
@@ -488,7 +718,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 fprintf(stderr, json_object_get_string(datakey_obj));
                 
                 struct aws_byte_buf cipherkey = b64_decode(app_ctx, json_object_get_string(datakey_obj));
-
+                
                 struct aws_byte_buf datakey_package_decrypted;
                 rc = aws_kms_decrypt_blocking(client, &cipherkey, &datakey_package_decrypted);
 
@@ -566,6 +796,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 // struct aws_byte_buf ciphertext_decrypted = aws_byte_buf_from_c_str((char *) plaintext);
 
                 data_json = json_tokener_parse((char *) plaintext);
+				
 
             }
 
@@ -580,7 +811,112 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             aws_byte_buf_clean_up(&command);
             fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
 
+			
+			/* Verification of the signature and content from CCF */
+			// 1) Is this a valid signature based on public key? if not send STATUS "[CCF] Invalid Signature"
+			// 2) Is this a signed signature of the inputHash = hash(encrypted_dataset, encrypted_cmd, 1)? if not send STATUS "[CCF] Invalid InputHash"
+			// 3) Is the CCF counter == total_counter? if not send STATUS "[CCF] Mismatch Counter" 
+			// else if all checks pass send STATUS "[CCF] Signature Verified!"
+			const char *enc_data = json_object_get_string(ciphertext_obj);
+			const char *enc_cmd = json_object_get_string(command_obj);
+			
+			char preimage_buf[BUF_SIZE];
+			
+			strcpy(preimage_buf, "");
+			if(enc_data != NULL) {
+				strncat(preimage_buf, enc_data, strlen(enc_data));
+				fprintf(stderr, "HASH data: %s\n", preimage_buf);
+			}
+			if(enc_cmd != NULL) {
+				strncat(preimage_buf, enc_cmd, strlen(enc_cmd));
+				fprintf(stderr, "HASH cmd: %s\n", preimage_buf);
+			}
+			strncat(preimage_buf, "1", 1);
+			fprintf(stderr, "HASH pre: %s\n", preimage_buf);
+			
+			unsigned char inputHash[SHA256_DIGEST_LENGTH];
+			SHA256_CTX hctx;
+			SHA256_Init(&hctx);
+			SHA256_Update(&hctx, preimage_buf, strlen(preimage_buf));
+			SHA256_Final(inputHash, &hctx);
+			int i;
+			char hexstring[256];
+			char *strptr = hexstring;
+			for (i = 0; i < 32; i++)
+			{
+				sprintf(strptr, "%02x", inputHash[i]);
+				strptr += 2;
+			}
+							
             
+            int64_t total_counter = 0;
+			int mismatch_counter_flag = 0;
+			int mismatch_counter_delta = 0;	
+			int global_counter = 0;
+			
+			struct json_object *sig_jobj = json_object_object_get(object, "signature");
+            struct json_object *cnt_jobj = json_object_object_get(object, "counter");
+			if(cnt_jobj == NULL || sig_jobj == NULL) {
+                	fprintf(stderr, "NO SIGNATURE OR COUNTER\n"); 
+            }
+			else {
+				const char* signature = json_object_get_string(sig_jobj);
+				const char* counter = json_object_get_string(cnt_jobj);
+				global_counter = atoi(counter);
+				struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
+				if (totcount_jobj != NULL) {
+					total_counter = json_object_get_int64(totcount_jobj);
+				}
+				else {
+					total_counter = 0;
+				}	
+				if (total_counter+1 != global_counter) {
+					mismatch_counter_flag = 1;
+					mismatch_counter_delta = global_counter - total_counter - 1;
+				}
+
+				sprintf(strptr, "%d", global_counter);
+
+				unsigned char digest[SHA256_DIGEST_LENGTH];
+				SHA256_CTX sctx;
+				SHA256_Init(&sctx);
+				SHA256_Update(&sctx, hexstring, strlen(hexstring));
+				SHA256_Final(digest, &sctx);
+
+				BIO *bufio;
+				bufio = BIO_new_mem_buf((char*)pem_key_buffer, strlen(pem_key_buffer));
+				RSA* rsa_pubkey =  PEM_read_bio_RSA_PUBKEY(bufio, NULL, NULL, NULL);
+
+
+				char *out;
+				size_t out_len;  
+				out_len = b64_decoded_size(signature)+1;
+				out = malloc(out_len);
+				if (!c_b64_decode(signature, (unsigned char *)out, out_len)) {
+					fprintf(stderr, signature); 
+					rc = s_send_status(peer_fd, STATUS_ERR, signature); 
+				}
+				out[out_len] = '\0';
+
+				int result = RSA_verify(NID_sha256, digest, SHA256_DIGEST_LENGTH, (const unsigned char *) out, 256, rsa_pubkey);
+
+				RSA_free(rsa_pubkey);  
+				BIO_free(bufio);
+
+				if(result == 1 && (mismatch_counter_flag == 0)){
+					fprintf(stderr, "SIGNATURE VALID[%d]: %s\n", global_counter, preimage_buf); 
+				}
+				else if(result == 1 && (mismatch_counter_flag == 1)){
+					fprintf(stderr, "SIGNATURE INVALID COUNTER MISMATCH [%d] vs [%ld] %s: %s\n", global_counter, total_counter, hexstring, preimage_buf); 
+				}
+				else {
+					fprintf(stderr, "SIGNATURE INVALID[%d]: %s, HASH: %s\n", global_counter, signature, preimage_buf);  
+				}
+
+			}
+			
+			
+            /* Data Update */
             if (data_json == NULL){
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
@@ -592,9 +928,83 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 char * uuid = strtok(command_string, " ");
                 char * test = strtok(NULL, " ");
                 
-                
+				fprintf(stderr, "[DATASET] BEFORE UPDATE: %s\n", json_object_to_json_string(data_json));
+                char temp_buff[BUF_SIZE];
+              	
+                // Get "userdata" field
+                struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
+              
+                // If userdata_jobj is NULL dataset is empty and we need to initialize it
+                if (userdata_jobj == NULL){
+                  
+                    struct json_object *uuid_jobj = json_object_new_object();
+                    json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
+                    json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
+                  
+					userdata_jobj = json_object_new_object();
+					json_object_object_add(userdata_jobj, uuid, uuid_jobj);
+					
+					json_object_object_add(data_json, "user_data", userdata_jobj);
+                    json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)1));
+                  
+                }
+                else {
+					
+                    struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, uuid);
+					
+					// If uuid_jobj is NULL, first time user has queried add user 
+					if (uuid_jobj == NULL){
 
+						struct json_object *uuid_jobj = json_object_new_object();
+						json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
+						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
+						json_object_object_add(userdata_jobj, uuid, uuid_jobj);
+
+						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+						
+					}
+					else {
+
+						const char *test_history = json_object_get_string(json_object_object_get(uuid_jobj, "test_history"));
+						strcpy(temp_buff, test_history);
+						strncat(temp_buff, test, 1);
+						json_object_object_add(uuid_jobj, "test_history", json_object_new_string(temp_buff));
+						int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
+						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
+						
+						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+						
+					}
+				}
+				
+		
+				
+				// Handle delta in global_counter vs total_counter
+				if (mismatch_counter_flag){
+					struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
+					if(counter_mismatch_jobj == NULL) {
+						counter_mismatch_jobj = json_object_new_object();
+						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+						json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
+					}
+					else {
+						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+					}
+					int total_count = 0;
+					struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
+					if (totcount_jobj != NULL) {
+						total_count = json_object_get_int64(totcount_jobj);
+					}				
+					json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
+				}
+				
+				fprintf(stderr, "[DATASET] AFTER UPDATE: %s\n", json_object_to_json_string(data_json));		
+				
+				/*
                 struct json_object *command_obj = json_object_object_get(data_json, uuid);
+              
                 char cat_buff[BUF_SIZE];
                 if (command_obj == NULL){
                     strcpy(cat_buff, test);
@@ -604,7 +1014,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                     strncat(cat_buff, test, 1);
                 }
                 json_object_object_add(data_json, uuid, json_object_new_string(cat_buff));
-
+				*/
 
                 //RANDOM KEYGEN AND ENCRYPTION
 
@@ -695,6 +1105,62 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 // status query
                 // returns 0 or 1 for low and high risk respectively
                 //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query");
+				fprintf(stderr, "[DATASET] BEFORE QUERY: %s\n", json_object_to_json_string(data_json));
+				struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
+				if(userdata_jobj == NULL) {
+					rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset uninitialized: User does not exist");
+				}
+				else {
+					struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, (char *) command_decrypted.buffer);
+					if(uuid_jobj == NULL) {
+						rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset initialized: User does not exist");
+					}
+					else {
+						
+						int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
+						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
+						
+						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+						
+						struct json_object *testhist_jobj = json_object_object_get(uuid_jobj, "test_history");
+						const char * test_hist = json_object_get_string(testhist_jobj);
+						if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
+							rc = s_send_status(peer_fd, STATUS_OK, "1");
+						}
+						else{
+							rc = s_send_status(peer_fd, STATUS_OK, "0");
+						}
+						rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");
+						// TODO: return query_counter to user as well
+					}
+				}
+				
+				// Handle delta in global_counter vs total_counter
+				if (mismatch_counter_flag){
+					struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
+					if(counter_mismatch_jobj == NULL) {
+						counter_mismatch_jobj = json_object_new_object();
+						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+						json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
+					}
+					else {
+						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+					}
+					int total_count = 0;
+					struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
+					if (totcount_jobj != NULL) {
+						total_count = json_object_get_int64(totcount_jobj);
+					}				
+					json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
+				}
+				
+				fprintf(stderr, "[DATASET] AFTER QUERY: %s\n", json_object_to_json_string(data_json));
+						
+				fprintf(stderr, "[KEYGEN] AFTER QUERY\n");
+                //RANDOM KEYGEN AND ENCRYPTION
+			
+				/*
                 struct json_object *command_obj = json_object_object_get(data_json, (char *) command_decrypted.buffer);
                 const char * test_hist = json_object_get_string(command_obj);
                 //const char * data_string = json_object_get_string(data_json);
@@ -711,7 +1177,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 else{
                     rc = s_send_status(peer_fd, STATUS_OK, "0");
                 }
-                rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");
+                rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");*/
             }
 
             //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
@@ -727,6 +1193,12 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             //rc = s_send_status(peer_fd, STATUS_OK, (const char *)ciphertext_decrypted_b64.buffer);
             //aws_byte_buf_clean_up(&ciphertext_decrypted_b64); 
             break_on(rc <= 0);
+        } else if (strcmp(json_object_get_string(operation), "Request") == 0) {
+            //rc = s_send_status(peer_fd, STATUS_OK, "Operation REQUEST");
+            // TODO: Compute hash of (cmd + entire dataset)
+            rc = s_send_hash(peer_fd, STATUS_OK, buffer);
+            rc = s_send_status(peer_fd, STATUS_OK, "AFTER HASH");
+            break_on(rc <= 0);      
         } else {
             rc = s_send_status(peer_fd, STATUS_ERR, "Operation not recognized");
             break_on(rc <= 0);

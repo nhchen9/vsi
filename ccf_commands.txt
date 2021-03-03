@@ -1,0 +1,18 @@
+curl https://168.62.188.41:8080/app/counter/init -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/log/private?id=0 -X GET --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/log/private?id=1 -X GET --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/log/private?id=2 -X GET --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/log/private?id=3 -X GET --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/counter/reset -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
+
+curl https://168.62.188.41:8080/app/counter/increment -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -H "Content-Type: application/json" --data-binary '{"id": "3", "hash": "A07CD577627D23165C8C92AD91E0AF0D403889E4004992D7425D3BF24FBB5126"}' -k -w "\n"
+
+curl https://168.62.188.41:8080/app/counter/sign_counter -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -H "Content-Type: application/json" --data-binary '{"id": "3", "hash": "A07CD577627D23165C8C92AD91E0AF0D403889E4004992D7425D3BF24FBB5126"}' -k -w "\n"
+
+
+curl https://168.62.188.41:8080/app/log/private?id=6 -X GET --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"

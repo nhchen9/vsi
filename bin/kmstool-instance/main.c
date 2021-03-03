@@ -29,6 +29,9 @@ struct app_ctx {
     const struct aws_string *region;
     const struct aws_string *command;
     const struct aws_string *data_key;
+    const struct aws_string *request_type;
+    const struct aws_string *sig;
+    const struct aws_string *counter;
     uint32_t port;
     uint32_t cid;
     int peer_fd;
@@ -69,7 +72,14 @@ static struct aws_cli_option s_long_options[] = {
 static void s_parse_options(int argc, char **argv, struct app_ctx *ctx) {
     ctx->port = SERVICE_PORT;
     ctx->cid = 0;
-
+  
+    int i;
+    fprintf(stderr, "ARGS %d\n", argc);
+    for(i=1;i<argc;i++)
+    {
+        fprintf(stderr, "%s\n",argv[i]);
+    }
+  
     while (true) {
         int option_index = 0;
         int c = aws_cli_getopt_long(argc, argv, "p:c:r:h", s_long_options, &option_index);
@@ -104,15 +114,38 @@ static void s_parse_options(int argc, char **argv, struct app_ctx *ctx) {
     }
 
     if (aws_cli_optind < argc) {
+		fprintf(stderr, "A:%s\n",argv[aws_cli_optind]);
         ctx->command = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
     }
 
     if (aws_cli_optind < argc) {
-        ctx->data = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+		fprintf(stderr, "B:%s\n",argv[aws_cli_optind]);
+		if (strcmp(argv[aws_cli_optind], "None")) {
+        	ctx->data = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+		}
+		else {
+			aws_cli_optind++;
+		}
     }
 
     if (aws_cli_optind < argc) {
-        ctx->data_key = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+		fprintf(stderr, "C:%s\n",argv[aws_cli_optind]);
+		if (strcmp(argv[aws_cli_optind], "None")) {		
+        	ctx->data_key = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+		}
+		else {
+			aws_cli_optind++;
+		}
+    }
+
+    if (aws_cli_optind < argc) {
+		fprintf(stderr, "D:%s\n",argv[aws_cli_optind]);
+		ctx->sig = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
+    }
+
+    if (aws_cli_optind < argc) {
+		fprintf(stderr, "E:%s\n",argv[aws_cli_optind]);
+		ctx->counter = aws_string_new_from_c_str(ctx->allocator, argv[aws_cli_optind++]);
     }
 
     /*
@@ -391,7 +424,50 @@ int s_send_decrypt_command(struct app_ctx *app_ctx) {
     if (app_ctx->data_key){
         json_object_object_add(decrypt, "data_key", json_object_new_string(aws_string_c_str(app_ctx->data_key)));
     }
+	
+    if (app_ctx->sig){
+       json_object_object_add(decrypt, "signature", json_object_new_string(aws_string_c_str(app_ctx->sig)));      
+    }
+  
+    if (app_ctx->sig){
+       json_object_object_add(decrypt, "counter", json_object_new_string(aws_string_c_str(app_ctx->counter)));      
+    }
+  
     return s_write_object(app_ctx->peer_fd, decrypt);
+}
+
+int s_send_decrypt_sig_command(struct app_ctx *app_ctx) {
+    struct json_object *decrypt = json_object_new_object();
+    json_object_object_add(decrypt, "Operation", json_object_new_string("Decrypt"));
+    json_object_object_add(decrypt, "command", json_object_new_string(aws_string_c_str(app_ctx->command)));
+    
+    if (app_ctx->data){
+        json_object_object_add(decrypt, "Ciphertext", json_object_new_string(aws_string_c_str(app_ctx->data)));
+    }
+    
+    if (app_ctx->data_key){
+        json_object_object_add(decrypt, "data_key", json_object_new_string(aws_string_c_str(app_ctx->data_key)));
+    }
+  
+    if (app_ctx->sig){
+       json_object_object_add(decrypt, "signature", json_object_new_string(aws_string_c_str(app_ctx->sig)));      
+    }
+    return s_write_object(app_ctx->peer_fd, decrypt);
+}
+
+int s_send_request_command(struct app_ctx *app_ctx) {
+    struct json_object *request = json_object_new_object();
+    json_object_object_add(request, "Operation", json_object_new_string("Request"));
+    json_object_object_add(request, "command", json_object_new_string(aws_string_c_str(app_ctx->command)));
+    
+    if (app_ctx->data){
+        json_object_object_add(request, "Ciphertext", json_object_new_string(aws_string_c_str(app_ctx->data)));
+    }
+    
+    if (app_ctx->data_key){
+        json_object_object_add(request, "data_key", json_object_new_string(aws_string_c_str(app_ctx->data_key)));
+    }
+    return s_write_object(app_ctx->peer_fd, request);
 }
 
 int main(int argc, char **argv) {
@@ -453,7 +529,43 @@ int main(int argc, char **argv) {
         exit(1);
     }
     s_handle_status(&app_ctx);
-
+    /*
+    struct aws_string * check = aws_string_new_from_c_str(app_ctx.allocator, "REQUEST");
+    struct aws_string * check2 = aws_string_new_from_c_str(app_ctx.allocator, "PROCESS");
+    if(aws_string_eq(app_ctx.request_type, check)) {
+          fprintf(stderr, "HDIS REQUEST\n");
+          rc = s_send_request_command(&app_ctx);
+          if (rc != AWS_OP_SUCCESS) {
+              fprintf(stderr, "Could not send request command\n");
+              close(app_ctx.peer_fd);
+              aws_credentials_release(app_ctx.credentials);
+              exit(1);
+          }
+          s_handle_status(&app_ctx);      
+    }
+    else if(aws_string_eq(app_ctx.request_type, check2)) {
+        fprintf(stderr, "HDIS PROCESS+SIG\n");
+        rc = s_send_decrypt_sig_command(&app_ctx);
+        if (rc != AWS_OP_SUCCESS) {
+            fprintf(stderr, "Could not send decrypt command\n");
+            close(app_ctx.peer_fd);
+            aws_credentials_release(app_ctx.credentials);
+            exit(1);
+        }
+        s_handle_status(&app_ctx); 
+    }
+    else {
+        fprintf(stderr, "HDIS PROCESS\n");
+        rc = s_send_decrypt_command(&app_ctx);
+        if (rc != AWS_OP_SUCCESS) {
+            fprintf(stderr, "Could not send decrypt command\n");
+            close(app_ctx.peer_fd);
+            aws_credentials_release(app_ctx.credentials);
+            exit(1);
+        }
+        s_handle_status(&app_ctx);
+    }*/
+  
     rc = s_send_decrypt_command(&app_ctx);
     if (rc != AWS_OP_SUCCESS) {
         fprintf(stderr, "Could not send decrypt command\n");
@@ -463,6 +575,7 @@ int main(int argc, char **argv) {
     }
     s_handle_status(&app_ctx);
 
+  
     close(app_ctx.peer_fd);
     aws_mutex_clean_up(&app_ctx.mutex);
     aws_condition_variable_clean_up(&app_ctx.c_var);

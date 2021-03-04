@@ -458,7 +458,7 @@ struct aws_nitro_enclaves_rest_response *aws_nitro_enclaves_rest_client_request_
     aws_mutex_unlock(&ctx.mutex);
 
     if (ctx.error_code != AWS_OP_SUCCESS) {
-        fprintf(stderr, "failed  to process request");
+        fprintf(stderr, "failed to process request");
         goto err_clean;
     }
 

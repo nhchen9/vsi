@@ -2840,13 +2840,11 @@ char * aws_kms_encrypt_get_cipher(
     const char *key_str = "arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946";
     request_structure->key_id = aws_string_new_from_c_str(client->allocator, key_str);
 
-    
-
     request = aws_kms_encrypt_request_to_json(request_structure);
     if (request == NULL) {
         goto err_clean;
     }
-
+    
     // fprintf(stderr, "encrypt request:%s", aws_string_c_str(request));
 
     // if (request_structure->key_id == NULL){

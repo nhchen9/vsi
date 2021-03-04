@@ -15,44 +15,6 @@ import sys
 import hashlib
 import os
 KMS_KEY_ARN = 'arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946'
-BUCKET = 'enclave-testing-721f5e9d-2b0c-46b7-8128-411a764cb8de'
-ENCLAVE_CID = '26'
-def upload_file(key, text, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    data = {'encrypted_data': text}
-    serialized = json.dumps(data)
-    try:
-        response = s3_client.put_object(Bucket=bucket, Key=key, Body=bytes(serialized.encode('utf-8')))
-    except ClientError as e:
-        logging.error(e)
-        return False
-    return True
-
-def get_s3_data(key, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        ciphertext = json.loads(response['Body'].read())['encrypted_data']
-    except ClientError as e:
-        #logging.error(e)
-        return False
-    return ciphertext
-
-def get_s3_plaintext(key, bucket=BUCKET):
-    session = boto3.session.Session(region_name='us-west-2')
-    s3_client = session.client('s3')
-    kms_client = session.client('kms')
-    try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
-        dat = response['Body'].read()
-    except ClientError as e:
-        #logging.error(e)
-        return False
-    return dat
 
 def run_instance(cid, command, data, key):
     docker_client = docker.from_env()
@@ -74,14 +36,19 @@ def run_complete(cid, command, data, key, signature, value):
     container = docker_client.containers.run(image='kmstool-instance', network='host', command='/kmstool_instance --cid "{cid}" "{command}" "{data}" "{key}" "{sig}" "{value}"'.format(cid=cid, data=data, command=command, key=key, sig=signature, value=value), remove = True, stdout = False, stderr = True, detach=False)
     #print(cid, command, data, key, signature, value)
     #print(container)
-    if len(re.findall('EncData": "(.*?)",', container)) > 0:
-        encData = re.findall('EncData": "(.*?)",', container)[0].replace("\\", "")
-        encKey = re.findall('KeyPackage": "(.*?)" }', container)[0].replace("\\", "")
-        return encData, encKey, None
-    else:
+    encData = None
+    encKey = None
+    msg = None
+
+    encData = re.findall('EncData": "(.*?)",', container)[0].replace("\\", "")
+    encKey = re.findall('KeyPackage": "(.*?)"', container)[0].replace("\\", "")
+    try:
         msg = re.findall('Message": "(.*?)" }\n', container)[0].replace('\\', '')
-        return None, None, msg
+    except:
+        pass
     
+    return encData, encKey, msg
+
 
 def num_to_id(i):
     uuid = str(i)
@@ -174,6 +141,8 @@ if __name__ == '__main__':
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)
+            print("Data: ", encData)
+            print("Key: ", encKey)
         if qResult:
             #If status query, print result
             print(qResult)

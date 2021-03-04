@@ -20,7 +20,7 @@
 #include <string.h>
 
 #define SERVICE_PORT 3000
-#define BUF_SIZE 8192
+#define BUF_SIZE 2000000
 
 struct app_ctx {
     struct aws_allocator *allocator;

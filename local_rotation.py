@@ -105,6 +105,7 @@ if __name__ == '__main__':
         cert_file_path = "./user0_cert.pem"
         key_file_path = "./user0_privk.pem"
         cert = (cert_file_path, key_file_path)
+        networkcert = "./networkcert.pem"
         
         # for each run the assumption is that counter is initially zero, we cannot reset a counter once it has been incremented for monotonicity, however we can request a new counter from CCF using: curl https://168.62.188.41:8080/app/counter/reset -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
         # assign counter_id to response from the above curl request (new counter id)
@@ -115,18 +116,11 @@ if __name__ == '__main__':
         data['hash'] = inputHash
         json_data = json.dumps(data)
         
-        # temporary redirecting stderr around requests.post() due to console spam about server cert "verify=False", this is a open issue on CCF github concerning a mismatch in alternative domain name of node certificates and network certificate overall
-        null_fds = [os.open(os.devnull, os.O_RDWR) for x in xrange(2)]
-        save = os.dup(1), os.dup(2)
-        os.dup2(null_fds[0], 1)
-        os.dup2(null_fds[1], 2)     
+  
         
-        r = requests.post('https://168.62.188.41:8080/app/counter/increment', headers=headers, data=json_data, cert=cert, verify=False)
+        r = requests.post('https://168.62.188.41:8080/app/counter/increment', headers=headers, data=json_data, cert=cert, verify=networkcert)
 
-        os.dup2(save[0], 1)
-        os.dup2(save[1], 2)
-        os.close(null_fds[0])
-        os.close(null_fds[1])      
+   
         
         parse_response = json.loads(r.content)
         signature = parse_response['signature']

@@ -41,7 +41,7 @@ char *dsignature = "Uv2Mj+OwFTypR60vmpk8xjmqcBLaSssrK0UI4Hg4uH+s9ZNY49EnZI5kFNnR
 
 
 // CCF Public Key - hardcoded in enclave image
-char *pem_key_buffer = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr2PWtqKkhlwaFNOwoxSh\n5JtfJrev6NQt7OmwrsxiW4EBSvX3vVVr1uh8UGttNrRbkztGJvovVTXmPhgIpKlv\ne0t2TyzUAomUMkCAT3m1B7SS7z3T3backZm+veZ1mI/jYI88yrRo3N4UxgzKjBZ3\nOTP1nUFmFray1ZrTZT7U5G+5RNN/KidapMdo3ZMsJkcjNrZNG/LPFP35/gK8c9Qg\nJZmVF1YBL2MS5gf2cUj2JHtY+ghfH6B4RdijzPyGaN2pK4ZtLMu8MZFSffXFGgkW\ngajCG2gDA3W9A1A6KguAjg4rxPCRiOqRIhhBVjiKvbfYk4F9Hkf7/28s4zpSSRYq\n4QIDAQAB\n-----END PUBLIC KEY-----\n";   
+char *pem_key_buffer = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoH01mxcL/8uFKZJWgXPr\nx1bx8SVXpduR/YqT5Tzwj2o5DoD79YLFhd1xRvsHJKrCLOY2h4RMiijFzNSbL2vu\ntj6oTutfQjDLe3QQnMiNnL6Vctn+4o+Ky9DOrtN3ihzUP+h17EQfKMh/c00rXCWB\n5ZU+lB8TR1zRNBXmUhymrO7AMKi2ypekglw3AVYxxDKPdD9XEL+U8OM7oNRnErqX\nZ/9WevmsxX/dNXPnveSeg6G7/dXvQSVPcV0ZaRZI4cUysE2Gr2cOgopFJ0SIybx2\nmE+22Xab/sKZpJOko1mlbWok8rJtEyFatJswOrCkd9wy/OHG13bQXPrS/3KQWAD3\nCQIDAQAB\n-----END PUBLIC KEY-----\n";   
 
 // Given size of an raw input buffer (N = inlen bytes) compute size of cooresponding base64 encoded buffer -> ceil(4(N/3), 4 bytes)
 size_t b64_encoded_size(size_t inlen)
@@ -944,7 +944,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 					fprintf(stderr, "SIGNATURE VALID[%d]: %s\n", global_counter, preimage_buf); 
 				}
 				else if(result == 1 && (mismatch_counter_flag == 1)){
-					fprintf(stderr, "SIGNATURE INVALID COUNTER MISMATCH [%d] vs [%ld] %s: %s\n", global_counter, total_counter, hexstring, preimage_buf); 
+					fprintf(stderr, "SIGNATURE INVALID COUNTER MISMATCH [%d] vs [%ld] %s: %s\n", global_counter, total_counter+1, hexstring, preimage_buf); 
 				}
 				else {
 					fprintf(stderr, "SIGNATURE INVALID[%d]: %s, HASH: %s\n", global_counter, signature, preimage_buf);  

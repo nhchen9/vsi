@@ -14,7 +14,7 @@ import requests
 import sys
 import hashlib
 import os
-KMS_KEY_ARN = 'arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946'
+KMS_KEY_ARN = 'arn:aws:kms:us-west-2:269163721785:key/f12133ea-b6ac-4cff-89ad-8b1145b4a8bc'
 
 def run_instance(cid, command, data, key):
     docker_client = docker.from_env()
@@ -108,7 +108,7 @@ if __name__ == '__main__':
         
         # for each run the assumption is that counter is initially zero, we cannot reset a counter once it has been incremented for monotonicity, however we can request a new counter from CCF using: curl https://168.62.188.41:8080/app/counter/reset -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
         # assign counter_id to response from the above curl request (new counter id)
-        counter_id = str(6)
+        counter_id = str(3)
         headers = {'Content-Type': 'application/json'}
         data = {}
         data['id'] = counter_id

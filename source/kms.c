@@ -2785,8 +2785,8 @@ int aws_kms_encrypt_blocking(
     rc = s_aws_nitro_enclaves_kms_client_call_blocking(client, kms_target_encrypt, request, &response);
     if (rc != 200) {
         fprintf(stderr, "Got non-200 answer from KMS: %d\n", rc);
-        fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
-        fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
+        //fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
+        //fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
         goto err_clean;
     }
 
@@ -2855,11 +2855,13 @@ char * aws_kms_encrypt_get_cipher(
     //     fprintf(stderr, "string valid????????%d\n", temp);
     // }
 
+    fprintf(stderr, "decrypt request string:%s\n", aws_string_c_str(request));
+
     rc = s_aws_nitro_enclaves_kms_client_call_blocking(client, kms_target_encrypt, request, &response);
     if (rc != 200) {
         fprintf(stderr, "Got non-200 answer from KMS: %d\n", rc);
-        fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
-        fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
+        //fprintf(stderr, "response string:%s\n", aws_string_c_str(response));
+        //fprintf(stderr, "response string:%s\n", aws_string_c_str(request));
         goto err_clean;
     }
 

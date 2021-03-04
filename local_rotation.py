@@ -14,7 +14,7 @@ import requests
 import sys
 import hashlib
 import os
-KMS_KEY_ARN = 'arn:aws:kms:us-west-2:269163721785:key/f12133ea-b6ac-4cff-89ad-8b1145b4a8bc'
+KMS_KEY_ARN = 'arn:aws:kms:us-west-2:779619664536:key/d3a3ce82-5390-49d8-bd77-400ebbe77946'
 
 def run_instance(cid, command, data, key):
     docker_client = docker.from_env()
@@ -80,7 +80,9 @@ if __name__ == '__main__':
 
     #Local file with plaintext commands, for reference
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
+    diff = 0
     for i in range(len(cmd_list)):
+        i = i - diff
         cmd = cmd_list[i]
         if i > 0:
             cur_data = open(LOCAL_DATA, "rt").read()
@@ -88,7 +90,7 @@ if __name__ == '__main__':
         t0 = time.time()
 		
         print("")        
-        print(plain_cmd_ref[i])
+        print(plain_cmd_ref[i%len(plain_cmd_ref)])
         
         #hardcoded enclave cid to be 5... set with "--enclave-cid 5" or replace with actual cid
         #encData, encKey, qResult = run_instance(5, cmd, cur_data, cur_key)
@@ -135,14 +137,19 @@ if __name__ == '__main__':
         print(value, signature)
 
 		
-        encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
-        
+        try:
+            encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
+        except:
+            print("ENCLAVE FAILED, RETRYING!")
+            print(cmd)
+            diff += 1
+            continue
         if encData:
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)
-            print("Data: ", encData)
-            print("Key: ", encKey)
+            #print("Data: ", encData)
+            #print("Key: ", encKey)
         if qResult:
             #If status query, print result
             print(qResult)

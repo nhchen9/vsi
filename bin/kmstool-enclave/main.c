@@ -839,7 +839,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
             struct json_object *command_obj = json_object_object_get(object, "command");
 
-            
+            fprintf(stderr, "encoded encrypted: %s\n", json_object_get_string(command_obj));
             struct aws_byte_buf command = b64_decode(app_ctx, (unsigned char *) json_object_get_string(command_obj), strlen(json_object_get_string(command_obj)));
 
             /* Decrypt the data with KMS. */
@@ -1211,12 +1211,14 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             fprintf(stderr, "New Generated data length: %d\n", cipherlen);
 
             struct aws_byte_buf keypackage_encoded = b64_encode(app_ctx, keypackage, 256 + 128 + 16 + 4); // base 64 encrypted data
-
+            fprintf(stderr, "New Encoded Keypackage: %s\n", (char *) keypackage_encoded.buffer);
             /**
             * KMS Encrypt key package
             */
             //struct aws_byte_buf dec_key = aws_byte_buf_from_array((void *) keypackage, 256 + 128 + 16 + 4);
             struct aws_byte_buf enc_key;
+
+            //aws_kms_encrypt_blocking(client, &keypackage_encoded, &enc_key);
 
             enc_key = aws_byte_buf_from_c_str(aws_kms_encrypt_get_cipher(client, &keypackage_encoded, &enc_key));  // base 64 encrypted key
 

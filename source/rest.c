@@ -457,8 +457,10 @@ struct aws_nitro_enclaves_rest_response *aws_nitro_enclaves_rest_client_request_
     aws_condition_variable_wait(&ctx.c_var, &ctx.mutex);
     aws_mutex_unlock(&ctx.mutex);
 
+
+
     if (ctx.error_code != AWS_OP_SUCCESS) {
-        fprintf(stderr, "failed to process request");
+        fprintf(stderr, "failed to process request, code: %d\n", ctx.error_code);
         goto err_clean;
     }
 
@@ -468,11 +470,11 @@ struct aws_nitro_enclaves_rest_response *aws_nitro_enclaves_rest_client_request_
 
     return ctx.response;
 err_clean:
-    aws_http_message_destroy(ctx.request);
-    aws_input_stream_destroy(ctx.request_data_stream);
-    aws_signable_destroy(sign_request);
+    //aws_http_message_destroy(ctx.request);
+    //aws_input_stream_destroy(ctx.request_data_stream);
+    //aws_signable_destroy(sign_request);
 
-    aws_nitro_enclaves_rest_response_destroy(ctx.response);
+    //aws_nitro_enclaves_rest_response_destroy(ctx.response);
     return NULL;
 }
 

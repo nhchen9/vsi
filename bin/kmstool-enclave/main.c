@@ -1042,19 +1042,6 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 				
 				fprintf(stderr, "[DATASET] AFTER UPDATE: %s\n", json_object_to_json_string(data_json));		
 				
-				/*
-                struct json_object *command_obj = json_object_object_get(data_json, uuid);
-              
-                char cat_buff[BUF_SIZE];
-                if (current_data == NULL){
-                    strcpy(cat_buff, test);
-                }else{
-                    const char * test_hist = json_object_get_string(current_data);
-                    strcpy(cat_buff, test_hist);
-                    strncat(cat_buff, test, 1);
-                }
-                json_object_object_add(data_json, uuid, json_object_new_string(cat_buff));
-				*/
 
             }else{
                 // status query

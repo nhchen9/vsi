@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     #Local file with plaintext commands, for reference
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
-    for i in range(20):
+    for i in range(len(cmd_list)):
         cmd = cmd_list[i]
         if i > 0:
             cur_data = open(LOCAL_DATA, "rt").read()

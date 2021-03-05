@@ -844,6 +844,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
             /* Decrypt the data with KMS. */
             struct aws_byte_buf command_decrypted;
+            
             rc = aws_kms_decrypt_blocking(client, &command, &command_decrypted);
             aws_byte_buf_clean_up(&command);
             fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
@@ -1127,7 +1128,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             }
             unsigned char iv[129];
             for ( int i = 0 ; i < 128 ; i++ ){
-                iv[i] = iv[256 + i]%90 + 33;
+                iv[i] = rand_key[256 + i]%90 + 33;
             }
 
             key[256] = '\0';

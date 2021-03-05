@@ -2620,7 +2620,7 @@ static int s_aws_nitro_enclaves_kms_client_call_blocking(
     aws_input_stream_read(request_stream, &response_data);
     *response = aws_string_new_from_array(client->allocator, response_data.buffer, response_data.len);
     aws_byte_buf_clean_up(&response_data);
-
+    
     int status = AWS_OP_SUCCESS;
     aws_http_message_get_response_status(rest_response->response, &status);
     aws_nitro_enclaves_rest_response_destroy(rest_response);
@@ -2855,7 +2855,7 @@ char * aws_kms_encrypt_get_cipher(
     //     fprintf(stderr, "string valid????????%d\n", temp);
     // }
 
-    fprintf(stderr, "decrypt request string:%s\n", aws_string_c_str(request));
+    fprintf(stderr, "encrypt request string:%s\n", aws_string_c_str(request));
 
     rc = s_aws_nitro_enclaves_kms_client_call_blocking(client, kms_target_encrypt, request, &response);
     if (rc != 200) {

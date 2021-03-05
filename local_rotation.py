@@ -81,12 +81,19 @@ if __name__ == '__main__':
     #Local file with plaintext commands, for reference
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
     diff = 0
+    enclave_id = None
     for i in range(len(cmd_list)):
         i = i - diff
+        #i=0
         cmd = cmd_list[i]
-        if i > 0:
+        try:
+            print("loaded")
             cur_data = open(LOCAL_DATA, "rt").read()
             cur_key = open(LOCAL_KEY, "rt").read()
+        except:
+            print("failed load")
+            cur_data = None
+            cur_key = None
         t0 = time.time()
 		
         print("")        
@@ -135,10 +142,20 @@ if __name__ == '__main__':
             encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
         except:
             print("ENCLAVE FAILED, RETRYING!")
-            print(cmd)
-            diff += 1
-            continue
+            time.sleep(5)
+            enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
+            if enclave_id:
+                os.system("sudo nitro-cli terminate-enclave --enclave-id {:s}".format(enclave_id))
+            time.sleep(5)
+            os.system("sudo nitro-cli run-enclave --eif-path kmstool.eif --memory 512 --cpu-count 2 --debug-mode --enclave-cid 5")
+            enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
+            os.system("nitro-cli console --enclave-id {:s} >> out.txt &".format(enclave_id))
+            encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
+            #print(cmd)
+            #diff += 1
+            #continue
         if encData:
+            pass
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)

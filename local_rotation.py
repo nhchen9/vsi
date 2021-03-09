@@ -63,6 +63,7 @@ def make_data(users, hisst_len):
 
     return dat
 
+
 if __name__ == '__main__':
 
     # Data and key are stored locally in encrypted format.
@@ -82,10 +83,14 @@ if __name__ == '__main__':
     plain_cmd_ref = open("cmd.txt","rt").read().split("\n")
     diff = 0
     enclave_id = None
-    for i in range(len(cmd_list)):
+    fails = 0
+    start = time.time()
+
+    for i in range(1000):
+        
         i = i - diff
         #i=0
-        cmd = cmd_list[i]
+        cmd = cmd_list[i%len(cmd_list)]
         try:
             print("loaded")
             cur_data = open(LOCAL_DATA, "rt").read()
@@ -142,11 +147,12 @@ if __name__ == '__main__':
             encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
         except:
             print("ENCLAVE FAILED, RETRYING!")
-            time.sleep(5)
+            #time.sleep(5)
+            fails += 1
             enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
             if enclave_id:
                 os.system("sudo nitro-cli terminate-enclave --enclave-id {:s}".format(enclave_id))
-            time.sleep(5)
+            #time.sleep(5)
             os.system("sudo nitro-cli run-enclave --eif-path kmstool.eif --memory 512 --cpu-count 2 --debug-mode --enclave-cid 5")
             enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
             os.system("nitro-cli console --enclave-id {:s} >> out.txt &".format(enclave_id))
@@ -164,4 +170,6 @@ if __name__ == '__main__':
         if qResult:
             #If status query, print result
             print(qResult)
+        print(round((time.time() - start)/(i+1), 2))
+        print(fails, i)
 			

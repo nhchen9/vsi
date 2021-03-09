@@ -747,8 +747,8 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
                 * Start by KMS Decrypting the AES-GCM data key package
                 */
 
-                const char * encoded_cipherkey = json_object_get_string(datakey_obj);
-
+                //const char * encoded_cipherkey = json_object_get_string(datakey_obj);
+                const char * encoded_cipherkey = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAG9qk/1bv5uc6XWbMkiirpzAAAChDCCAoAGCSqGSIb3DQEHBqCCAnEwggJtAgEAMIICZgYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAw5RsCKIhjYuAs+Tn0CARCAggI3rkzqadh5TNyPCZCeVGf2eapgojKv9qc+VBphFBfJtqNWtOUVQ5xLk7RVON5iZp0o4FGCl/aUGVHILTITw+I3l9lJ8/IAICQPExZr/D+ouurZrI/8RBGDvUxyI0DA9K1xksDUEGc7/KcJTxPqYpwHI0JJ1/rs3jNbqAautKOpBAZ5eklGhU8i4k9+qOF3Zzne0ydlzaIkqSwbHIM4fNX2ua62toh6I1hFWw3mSzVtIjwp8kjKGhNqvRxrWfgS+PzUflDdjRb3kh43tXlmsAQI2CvGsoH4vcH2TsvwPahIC/+feY9+euGQrBSzxpLlEQokTEiXWwrOGOZ5T/17hlCAU5aHlzDCFJY3w3xxZqWQ6fFTezu3L2Ql2psgOacm5Ewfggy2g0is1OU1qLRSPT/VK//sBisFAI78qLcMw/pFUuzoAum2nqbacPPR95Mxsh8JdrIuILAnib0McKplrpmlMe/e3emewbLRoPHZ6B8UXjtrUyc32RrlpuBs5TDhmm2axyHWDTnX5enqGGF5PVWHuFVWwvTC1GrqYf7xlUL/BPns0Xd6vT1v+M/6+MS1A/5/tTm4qhQLlEIhUUA+pTuWKPSYZtgnkGrbIenSf5LiHBF9ODr3kSKCnNogRCnthu+aDdgtVMh8ZHU0BSc9jj5FPh9Z0HrOOHNxGE9z5u0zA5ZfHSx8vYXtvm44/eLKe8survmhvI7wjq2GJ6WrUIb6indw3nFs+u2wO0cjCdVMGLBY3l9rRurV";
                 fprintf(stderr, "Cipher: %s\n", encoded_cipherkey);
                 
                 struct aws_byte_buf cipherkey = b64_decode(app_ctx, (unsigned char *) encoded_cipherkey, strlen(encoded_cipherkey));

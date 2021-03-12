@@ -86,15 +86,19 @@ if __name__ == '__main__':
     fails = 0
     start = time.time()
 
+
+
     for i in range(1000):
         
         i = i - diff
         #i=0
-        cmd = cmd_list[i%len(cmd_list)]
+        cmd = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAELVEeSxDSYYYQfSRKlZbk2AAAAZjBkBgkqhkiG9w0BBwagVzBVAgEAMFAGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMDIkBJqjAUiKFOzIWAgEQgCOmQk66H7pF7Udl57/xSQY5S4iz56V2Fl79eD/P1C/2JJYjHA=="
         try:
             print("loaded")
             cur_data = open(LOCAL_DATA, "rt").read()
             cur_key = open(LOCAL_KEY, "rt").read()
+            #cur_data = "SVHTL6d6mXrg+lPbr0Qy9dKoh3huWejAbAMe7dav0G539F3c0qZlTdw1/85x4TiaN5gNrLL2B1BKj/yK4dNvirW3Z3PjkA91mu//YvxyNuf2wBTXHFSq31Ng3vrRSBW0yfThsT0XlYyi/oy5pAdCmjDBiHGgjYiWBV48er+9rIwDXrP5w4V5J330SVzDAwZ6g9HoAE4/G3AqLMJ9U3jAzv2ZQL2F5sEtgMsicXiBQ4AHN/06V5bsmJmbHETrY/lZnFZZ17Ip15PS3jWR83PKCCNGGsMKDr4tJ2UeOz1y++gIo6SxB0IQii8CL8QnJAiYCc3B283rbrqVlkDiVsGRw20W27SV+kBU+a5naABhnaIZPyoD50wHpJLygPOMxFdGQisu0DbuaWp4tIzUABT6eN3FhMVE71SsSWQm1CXcRpOuxl35tigVy3PxI8GjlDiuoUOhJldkgu5DSxEjgr9yEghBjBnBs2mfudW3CxrNjq5W1R0XFG/ZC7HEhk/bDIcZrMo/4UD2KXr2zw5oFE0L7V2s45jq91xc5ImzXng9YHxC2mgv0xIEZzf3qa5pmqPX/aJB6/LgEpcfhl8dfk3efqX9u7xaSbgmvzhnYs8+/jY+ZyBm"
+            #cur_key = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAEBwZEyM1lMJFTvjtqVos7/AAAChDCCAoAGCSqGSIb3DQEHBqCCAnEwggJtAgEAMIICZgYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAxXXGFVU5Gcg3ScU1gCARCAggI3/6sxbMunzc0zC9PkvPUFHQFsVQcGYhF94HIduB0UsB/qoCYB8xxjNsmlZf7aFpliiwTIGRtSwRSsqr222khPdZGEGRlz9ftYzzc7x1SlWdYDXsaZNqQR+lzj+tB67L/N9pqUjGldouadd5/+NyQ6SdeleyRi/tHKYyJMShuTy9N9ynT6+0aImc9SA3Cy83zZb7hUWQ+C7vULbIV9oR5A8GPKu4C1uPM7JvgZBWOjgrPnT78McfcSRsulkmtoAtiCFFQsbFgyn1dnbqo23pWKPZ0OErSQaO3K91ZomiuwqooJYoJ2zDcqQ8TpfjX1fMmC8xBzJQ9XlA4w1q/AcypBaD1MVEXSgrhaXHsp2Fw0ESfva5bkqj2qu/zTvy5kOClHvAdvRuNcDnuR6kB3ol3+xALCRCU3BrHOekcWhtcuqmawJlO8NiAQ4Vz3xA/B+IyKbyfhe4665SpJE326sZoEOTPbuHJJ3BAJTuvj+iizgh5YmJxjTqbF56BkH14lXZlOiNdswC0UFWxD8sHRvvnxXKv5CdSrvm875+KmVcyyQxzoLo8EnHFiR+uJ5H4cYNrXW9JM2uZyEEZcVsYXhAiZwCQV3uYvU9Y6h3IWg9dqmHAvixPbkjd0QLeZUCV+Tu5fHUCa0nDSEDWZz+RRi/6EtNlNWLMOacLDT85Di/DNdXzjBDV2abAsWOve+u92vknN/Yvy85Vve1efzy8/NOAJL5HUdjBO+keW1mGFyfKx5Ps/9wVDna4M"
         except:
             print("failed load")
             cur_data = None

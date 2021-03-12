@@ -67,8 +67,8 @@ def make_data(users, hisst_len):
 if __name__ == '__main__':
 
     # Data and key are stored locally in encrypted format.
-    LOCAL_DATA = "./data.txt"
-    LOCAL_KEY = "./key.txt"
+    LOCAL_DATA = "./local_data/data.txt"
+    LOCAL_KEY = "./local_data/key.txt"
     cur_data = None
     cur_key = None
 
@@ -92,13 +92,11 @@ if __name__ == '__main__':
         
         i = i - diff
         #i=0
-        cmd = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAELVEeSxDSYYYQfSRKlZbk2AAAAZjBkBgkqhkiG9w0BBwagVzBVAgEAMFAGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMDIkBJqjAUiKFOzIWAgEQgCOmQk66H7pF7Udl57/xSQY5S4iz56V2Fl79eD/P1C/2JJYjHA=="
+        cmd = cmd_list[i]
         try:
             print("loaded")
             cur_data = open(LOCAL_DATA, "rt").read()
             cur_key = open(LOCAL_KEY, "rt").read()
-            #cur_data = "SVHTL6d6mXrg+lPbr0Qy9dKoh3huWejAbAMe7dav0G539F3c0qZlTdw1/85x4TiaN5gNrLL2B1BKj/yK4dNvirW3Z3PjkA91mu//YvxyNuf2wBTXHFSq31Ng3vrRSBW0yfThsT0XlYyi/oy5pAdCmjDBiHGgjYiWBV48er+9rIwDXrP5w4V5J330SVzDAwZ6g9HoAE4/G3AqLMJ9U3jAzv2ZQL2F5sEtgMsicXiBQ4AHN/06V5bsmJmbHETrY/lZnFZZ17Ip15PS3jWR83PKCCNGGsMKDr4tJ2UeOz1y++gIo6SxB0IQii8CL8QnJAiYCc3B283rbrqVlkDiVsGRw20W27SV+kBU+a5naABhnaIZPyoD50wHpJLygPOMxFdGQisu0DbuaWp4tIzUABT6eN3FhMVE71SsSWQm1CXcRpOuxl35tigVy3PxI8GjlDiuoUOhJldkgu5DSxEjgr9yEghBjBnBs2mfudW3CxrNjq5W1R0XFG/ZC7HEhk/bDIcZrMo/4UD2KXr2zw5oFE0L7V2s45jq91xc5ImzXng9YHxC2mgv0xIEZzf3qa5pmqPX/aJB6/LgEpcfhl8dfk3efqX9u7xaSbgmvzhnYs8+/jY+ZyBm"
-            #cur_key = "AQICAHjDlQ35nIiO6k4cvEcJooGbQY3jNzV/jZYVN8q3cCqdMAEBwZEyM1lMJFTvjtqVos7/AAAChDCCAoAGCSqGSIb3DQEHBqCCAnEwggJtAgEAMIICZgYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAxXXGFVU5Gcg3ScU1gCARCAggI3/6sxbMunzc0zC9PkvPUFHQFsVQcGYhF94HIduB0UsB/qoCYB8xxjNsmlZf7aFpliiwTIGRtSwRSsqr222khPdZGEGRlz9ftYzzc7x1SlWdYDXsaZNqQR+lzj+tB67L/N9pqUjGldouadd5/+NyQ6SdeleyRi/tHKYyJMShuTy9N9ynT6+0aImc9SA3Cy83zZb7hUWQ+C7vULbIV9oR5A8GPKu4C1uPM7JvgZBWOjgrPnT78McfcSRsulkmtoAtiCFFQsbFgyn1dnbqo23pWKPZ0OErSQaO3K91ZomiuwqooJYoJ2zDcqQ8TpfjX1fMmC8xBzJQ9XlA4w1q/AcypBaD1MVEXSgrhaXHsp2Fw0ESfva5bkqj2qu/zTvy5kOClHvAdvRuNcDnuR6kB3ol3+xALCRCU3BrHOekcWhtcuqmawJlO8NiAQ4Vz3xA/B+IyKbyfhe4665SpJE326sZoEOTPbuHJJ3BAJTuvj+iizgh5YmJxjTqbF56BkH14lXZlOiNdswC0UFWxD8sHRvvnxXKv5CdSrvm875+KmVcyyQxzoLo8EnHFiR+uJ5H4cYNrXW9JM2uZyEEZcVsYXhAiZwCQV3uYvU9Y6h3IWg9dqmHAvixPbkjd0QLeZUCV+Tu5fHUCa0nDSEDWZz+RRi/6EtNlNWLMOacLDT85Di/DNdXzjBDV2abAsWOve+u92vknN/Yvy85Vve1efzy8/NOAJL5HUdjBO+keW1mGFyfKx5Ps/9wVDna4M"
         except:
             print("failed load")
             cur_data = None
@@ -120,10 +118,10 @@ if __name__ == '__main__':
         inputHash = m.hexdigest()
         print("inputHash:"),
         print(inputHash)
-        cert_file_path = "./user0_cert.pem"
-        key_file_path = "./user0_privk.pem"
+        cert_file_path = "./local_data/user0_cert.pem"
+        key_file_path = "./local_data/user0_privk.pem"
         cert = (cert_file_path, key_file_path)
-        networkcert = "./networkcert.pem"
+        networkcert = "./local_data/networkcert.pem"
         
         # for each run the assumption is that counter is initially zero, we cannot reset a counter once it has been incremented for monotonicity, however we can request a new counter from CCF using: curl https://168.62.188.41:8080/app/counter/reset -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
         # assign counter_id to response from the above curl request (new counter id)
@@ -134,38 +132,34 @@ if __name__ == '__main__':
         data['hash'] = inputHash
         json_data = json.dumps(data)
         
-  
-        
         r = requests.post('https://168.62.188.41:8080/app/counter/increment', headers=headers, data=json_data, cert=cert, verify=networkcert)
 
-   
-        
         parse_response = json.loads(r.content)
         signature = parse_response['signature']
         value = parse_response['value']
         print("CCF response:"),
         print(value, signature)
-
+        encData = None
+        encKey = None
+        qResult = None
 		
-        try:
-            encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
-        except:
-            print("ENCLAVE FAILED, RETRYING!")
-            #time.sleep(5)
-            fails += 1
-            enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
-            if enclave_id:
-                os.system("sudo nitro-cli terminate-enclave --enclave-id {:s}".format(enclave_id))
-            #time.sleep(5)
-            os.system("sudo nitro-cli run-enclave --eif-path kmstool.eif --memory 512 --cpu-count 2 --debug-mode --enclave-cid 5")
-            enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
-            os.system("nitro-cli console --enclave-id {:s} >> out.txt &".format(enclave_id))
-            encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
-            #print(cmd)
-            #diff += 1
-            #continue
+        for attempt in range(10):
+            try:
+                encData, encKey, qResult = run_complete(5, cmd, cur_data, cur_key, signature, value)
+                break
+            except:
+                print("ENCLAVE FAILED, RETRYING!")
+                #time.sleep(5)
+                fails += 1
+                enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
+                if enclave_id:
+                    os.system("sudo nitro-cli terminate-enclave --enclave-id {:s}".format(enclave_id))
+                #time.sleep(5)
+                os.system("sudo nitro-cli run-enclave --eif-path kmstool.eif --memory 512 --cpu-count 2 --debug-mode --enclave-cid 5")
+                enclave_id = os.popen("nitro-cli describe-enclaves | jq -r .[0].EnclaveID").read().replace("\n","")
+                os.system("nitro-cli console --enclave-id {:s} >> out.txt &".format(enclave_id))
+
         if encData:
-            pass
             #If data update, write new data and key files
             open(LOCAL_DATA, "wt").write(encData)
             open(LOCAL_KEY, "wt").write(encKey)

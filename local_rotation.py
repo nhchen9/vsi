@@ -105,7 +105,7 @@ if __name__ == '__main__':
 		
         print("")        
         print(plain_cmd_ref[i%len(plain_cmd_ref)])
-        
+
         #hardcoded enclave cid to be 5... set with "--enclave-cid 5" or replace with actual cid
         #encData, encKey, qResult = run_instance(5, cmd, cur_data, cur_key)
 
@@ -118,11 +118,11 @@ if __name__ == '__main__':
         inputHash = m.hexdigest()
         print("inputHash:"),
         print(inputHash)
-        cert_file_path = "./local_data/user0_cert.pem"
-        key_file_path = "./local_data/user0_privk.pem"
+        cert_file_path = "./user0_cert.pem"
+        key_file_path = "./user0_privk.pem"
         cert = (cert_file_path, key_file_path)
-        networkcert = "./local_data/networkcert.pem"
-        
+        networkcert = "./networkcert.pem"
+
         # for each run the assumption is that counter is initially zero, we cannot reset a counter once it has been incremented for monotonicity, however we can request a new counter from CCF using: curl https://168.62.188.41:8080/app/counter/reset -X POST --cacert networkcert.pem --cert user0_cert.pem --key user0_privk.pem -k -w "\n"
         # assign counter_id to response from the above curl request (new counter id)
         counter_id = str(3)
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         data['id'] = counter_id
         data['hash'] = inputHash
         json_data = json.dumps(data)
-        
+
         r = requests.post('https://168.62.188.41:8080/app/counter/increment', headers=headers, data=json_data, cert=cert, verify=networkcert)
 
         parse_response = json.loads(r.content)

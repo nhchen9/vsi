@@ -41,7 +41,7 @@ char *dsignature = "Uv2Mj+OwFTypR60vmpk8xjmqcBLaSssrK0UI4Hg4uH+s9ZNY49EnZI5kFNnR
 
 
 // CCF Public Key - hardcoded in enclave image
-char *pem_key_buffer = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1rqqghWJ4gAgXveyzMNd\nvP7Szzx6/5IAizvp/V1+CjNvLypEG9nUGP1/d24o5RaGSKq1yVv7m0UBCgmKIWzX\nNKSgPRgwiCNYNxc+CU3274o3cV+/gVaiVzXKR/8ofbVrjtC9/9f9fazvTG6JE3l5\nVHSNDNLSBbzocYn31nt4+PDP8IFD8vjvvPY6ZsuKaYyYMxrnBtdn7PzRdGwTrYbw\nroce+cmcr5J8sIFtKSf4PU31gebS3KhOocGjYGYESvYFbTl2/qhAXv2VQxl9p/Ty\n7ZrkDrB2SRHyoBlYnJnqX/rMi7+n2f+2GD3KGLcvR/JW4Yl+vSesgBsEPYoImjvP\nqQIDAQAB\n-----END PUBLIC KEY-----\n";   
+char *pem_key_buffer = "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhasLfPNpkhEVcZulmdDv\nL5pr93jX6oWTlh3pgIUtwXgAWomhtggrDe28Mdb65W56lN9y9mIqm0plrQY6U6F+\nIkifAgKVrpAqcUSBcIkh11QlVq1O9lLeX5N1c9clhwKcG67jB1Q966Y4JnQ2cnO6\nP9YAT8Z8jfK3Z1We1CtN0HQ5mINn0tjSOY1qH303QaWlaNAtWtBVmZurB+jrh7c6\n9h50lxkLwtfraa5N2yVSbgcqIwr4OjrdHSk0SvdDIEJvhDyHJ83I33YQ6XA2p+Un\nGvxq8jt68yySh2oLl+U76M8gpde5aVNTAPnO4kWQ9VL8YX5gHdo/LmpuZy7FkgHz\nfQIDAQAB\n-----END PUBLIC KEY-----\n";   
 
 // Given size of an raw input buffer (N = inlen bytes) compute size of cooresponding base64 encoded buffer -> ceil(4(N/3), 4 bytes)
 size_t b64_encoded_size(size_t inlen)

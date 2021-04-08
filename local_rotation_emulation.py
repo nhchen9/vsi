@@ -70,8 +70,8 @@ def make_data(users, hisst_len):
     return dat
 
 
-def counter_increment(inputhash):
-	counter_increment.counter += 1
+def counter_increment(inputhash, batch_size = 1):
+	counter_increment.counter += batch_size
 	message = inputhash + str(counter_increment.counter)
 	key = RSA.import_key(open('./emulation_prik.pem').read())
 	h = SHA256.new(message)
@@ -104,13 +104,14 @@ if __name__ == '__main__':
     fails = 0
     start = time.time()
 
+    batch_size = 2
 
-
-    for i in range(1000):
+    for i in range(100000):
         
         i = i - diff
+        ind = (batch_size * i)%len(cmd_list)
         #i=0
-        cmd = cmd_list[i]
+        cmd = ';'.join(cmd_list[ind:(ind+batch_size)])
         try:
             print("loaded")
             cur_data = open(LOCAL_DATA, "rt").read()
@@ -122,7 +123,7 @@ if __name__ == '__main__':
         t0 = time.time()
 		
         print("")        
-        print(plain_cmd_ref[i%len(plain_cmd_ref)])
+        print(cmd_list[ind:(ind+batch_size)])
 
         #hardcoded enclave cid to be 5... set with "--enclave-cid 5" or replace with actual cid
         #encData, encKey, qResult = run_instance(5, cmd, cur_data, cur_key)
@@ -138,7 +139,7 @@ if __name__ == '__main__':
         print(inputHash)
 		
 		# Emulation of counter increment
-        signature,value = counter_increment(inputHash)
+        signature,value = counter_increment(inputHash, batch_size)
         print("CCF Emulation response:"),
         print(value, signature)
 		

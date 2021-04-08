@@ -385,7 +385,7 @@ int s_send_data_key(int peer_fd, int status, char * enc_data, char * enc_key) {
     return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
 }
 
-int s_send_data_key_query(int peer_fd, int status, char * enc_data, char * enc_key, char result) {
+int s_send_data_key_query(int peer_fd, int status, char * enc_data, char * enc_key, char * result) {
     struct json_object *status_object = json_object_new_object();
     if (status_object == NULL) {
         return -1;
@@ -402,7 +402,7 @@ int s_send_data_key_query(int peer_fd, int status, char * enc_data, char * enc_k
         json_object_object_add(status_object, "KeyPackage", json_object_new_string(enc_key));
     }
 
-    json_object_object_add(status_object, "Message", json_object_new_string(&result));
+    json_object_object_add(status_object, "Message", json_object_new_string(result));
 
     const char *status_str = json_object_to_json_string(status_object);
     return s_write_all(peer_fd, status_str, strlen(status_str) + 1);
@@ -838,17 +838,50 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
              */
 
             struct json_object *command_obj = json_object_object_get(object, "command");
+            const char * commands_string_const = json_object_get_string(command_obj);
+            char commands_string [strlen(commands_string_const) + 1];
+            memset(commands_string, 0, sizeof(commands_string));
+            strcpy(commands_string, commands_string_const);
 
+            int num_commands = 1;
+            char *pch = strchr(commands_string,';');
+
+            while (pch!=NULL) {
+                num_commands++;
+                pch = strchr(pch+1,';');
+            }
+
+            struct aws_byte_buf command_list[num_commands];
+
+            int command_ind = 0;
+            char * command_str = strtok(commands_string, ";");
+            while (command_str!=NULL) {
+                struct aws_byte_buf command_encrypted = b64_decode(app_ctx, (unsigned char *) command_str, strlen(command_str));
+                rc = aws_kms_decrypt_blocking(client, &command_encrypted, &command_list[command_ind]);
+                aws_byte_buf_clean_up(&command_encrypted);
+                fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
+                command_ind++;
+                command_str = strtok(NULL, ";");
+            }
+
+            fprintf(stderr, "Num commands: %d\n", num_commands);
+
+            for ( int i = 0 ; i < num_commands ; i++ ){
+                fprintf(stderr, "Command #%d: %s\n", i, (char *)command_list[i].buffer);
+            }
+            
+            
+            
+            /*
             fprintf(stderr, "encoded encrypted: %s\n", json_object_get_string(command_obj));
             struct aws_byte_buf command = b64_decode(app_ctx, (unsigned char *) json_object_get_string(command_obj), strlen(json_object_get_string(command_obj)));
 
-            /* Decrypt the data with KMS. */
             struct aws_byte_buf command_decrypted;
             
             rc = aws_kms_decrypt_blocking(client, &command, &command_decrypted);
             aws_byte_buf_clean_up(&command);
             fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not decrypt ciphertext");
-
+            */
 			
 			/* Verification of the signature and content from CCF */
 			// 1) Is this a valid signature based on public key? if not send STATUS "[CCF] Invalid Signature"
@@ -953,169 +986,169 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
 
 			}
 			
-            int query_result = -1;
-			
+			char batch_result [BUF_SIZE];
+            memset(batch_result, 0, sizeof(batch_result));
+            int batch_result_written = 0;
+
             /* Data Update */
             if (data_json == NULL){
                 rc = s_send_status(peer_fd, STATUS_OK, (char *)buf);
             }
-            if (strstr((char *) command_decrypted.buffer, " ")!= NULL){
-                // Data update command (distinguished by two arguments)
 
-                /**
-                 * Update JSON with new user test result
-                 */
-                char * command_string = (char *) command_decrypted.buffer;
-                char * uuid = strtok(command_string, " ");
-                char * test = strtok(NULL, " ");
-                
-				fprintf(stderr, "[DATASET] BEFORE UPDATE: %s\n", json_object_to_json_string(data_json));
-                char temp_buff[BUF_SIZE];
-              	
-                // Get "userdata" field
-                struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
-              
-                // If userdata_jobj is NULL dataset is empty and we need to initialize it
-                if (userdata_jobj == NULL){
-                  
-                    struct json_object *uuid_jobj = json_object_new_object();
-                    json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
-                    json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
-                  
-					userdata_jobj = json_object_new_object();
-					json_object_object_add(userdata_jobj, uuid, uuid_jobj);
-					
-					json_object_object_add(data_json, "user_data", userdata_jobj);
-                    json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)1));
-                  
+            for( int cmd_ind = 0 ; cmd_ind < num_commands ; cmd_ind++ ){
+                struct aws_byte_buf command_decrypted = command_list[cmd_ind];
+
+                if (strstr((char *) command_decrypted.buffer, " ") != NULL){
+                    // Data update command (distinguished by two arguments)
+
+                    /**
+                        * Update JSON with new user test result
+                        */
+                    char * command_string = (char *) command_decrypted.buffer;
+                    char * uuid = strtok(command_string, " ");
+                    char * test = strtok(NULL, " ");
+                    
+                    fprintf(stderr, "[DATASET] BEFORE UPDATE: %s\n", json_object_to_json_string(data_json));
+                    char temp_buff[BUF_SIZE];
+                    
+                    // Get "userdata" field
+                    struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
+                    
+                    // If userdata_jobj is NULL dataset is empty and we need to initialize it
+                    if (userdata_jobj == NULL){
+                        
+                        struct json_object *uuid_jobj = json_object_new_object();
+                        json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
+                        json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
+                        
+                        userdata_jobj = json_object_new_object();
+                        json_object_object_add(userdata_jobj, uuid, uuid_jobj);
+                        
+                        json_object_object_add(data_json, "user_data", userdata_jobj);
+                        json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)1));
+                        
+                    }
+                    else {
+                        
+                        struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, uuid);
+                        
+                        // If uuid_jobj is NULL, first time user has queried add user 
+                        if (uuid_jobj == NULL){
+
+                            struct json_object *uuid_jobj = json_object_new_object();
+                            json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
+                            json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
+                            json_object_object_add(userdata_jobj, uuid, uuid_jobj);
+
+                            int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+                            json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+                            
+                        }
+                        else {
+
+                            const char *test_history = json_object_get_string(json_object_object_get(uuid_jobj, "test_history"));
+                            strcpy(temp_buff, test_history);
+                            strncat(temp_buff, test, 1);
+                            json_object_object_add(uuid_jobj, "test_history", json_object_new_string(temp_buff));
+                            int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
+                            json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
+                            
+                            int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+                            json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+                            
+                        }
+                    }
+                    
+                    // Update result string with delimiter (empty value for update)
+                    batch_result[batch_result_written] = ';';
+                    batch_result_written++;
+                    
+                    // Handle delta in global_counter vs total_counter
+                    if (mismatch_counter_flag){
+                        struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
+                        if(counter_mismatch_jobj == NULL) {
+                            counter_mismatch_jobj = json_object_new_object();
+                            json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+                            json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
+                        }
+                        else {
+                            json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+                        }
+                        int total_count = 0;
+                        struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
+                        if (totcount_jobj != NULL) {
+                            total_count = json_object_get_int64(totcount_jobj);
+                        }				
+                        json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
+                    }
+                    
+                    fprintf(stderr, "[DATASET] AFTER UPDATE: %s\n", json_object_to_json_string(data_json));		
+                    
+
+                }else{
+                    // status query
+                    // returns 0 or 1 for low and high risk respectively
+                    //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query");
+                    fprintf(stderr, "[DATASET] BEFORE QUERY: %s\n", json_object_to_json_string(data_json));
+                    struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
+                    if(userdata_jobj == NULL) {
+                        rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset uninitialized: User does not exist");
+                    }
+                    else {
+                        struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, (char *) command_decrypted.buffer);
+                        if(uuid_jobj == NULL) {
+                            rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset initialized: User does not exist");
+                        }
+                        else {
+                            
+                            int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
+                            json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
+                            
+                            int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
+                            json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
+                            
+                            struct json_object *testhist_jobj = json_object_object_get(uuid_jobj, "test_history");
+                            const char * test_hist = json_object_get_string(testhist_jobj);
+                            if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
+                                // Update result string with delimiter (status value for query)
+                                batch_result[batch_result_written] = '1';
+                                batch_result[batch_result_written+1] = ';';
+                                batch_result_written += 2;
+                            }
+                            else{
+                                // Update result string with delimiter (status value for query)
+                                batch_result[batch_result_written] = '0';
+                                batch_result[batch_result_written+1] = ';';
+                                batch_result_written += 2;
+                            }
+                        }
+                    }
+
+                    
+                    
+                    // Handle delta in global_counter vs total_counter
+                    if (mismatch_counter_flag){
+                        struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
+                        if(counter_mismatch_jobj == NULL) {
+                            counter_mismatch_jobj = json_object_new_object();
+                            json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+                            json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
+                        }
+                        else {
+                            json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
+                        }
+                        int total_count = 0;
+                        struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
+                        if (totcount_jobj != NULL) {
+                            total_count = json_object_get_int64(totcount_jobj);
+                        }				
+                        json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
+                    }
+                    
+                    fprintf(stderr, "[DATASET] AFTER QUERY: %s\n", json_object_to_json_string(data_json));
+                            
+                    fprintf(stderr, "[KEYGEN] AFTER QUERY\n");
                 }
-                else {
-					
-                    struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, uuid);
-					
-					// If uuid_jobj is NULL, first time user has queried add user 
-					if (uuid_jobj == NULL){
-
-						struct json_object *uuid_jobj = json_object_new_object();
-						json_object_object_add(uuid_jobj, "test_history", json_object_new_string(test));
-						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64((int64_t)1));
-						json_object_object_add(userdata_jobj, uuid, uuid_jobj);
-
-						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
-						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
-						
-					}
-					else {
-
-						const char *test_history = json_object_get_string(json_object_object_get(uuid_jobj, "test_history"));
-						strcpy(temp_buff, test_history);
-						strncat(temp_buff, test, 1);
-						json_object_object_add(uuid_jobj, "test_history", json_object_new_string(temp_buff));
-						int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
-						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
-						
-						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
-						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
-						
-					}
-				}
-				
-		
-				
-				// Handle delta in global_counter vs total_counter
-				if (mismatch_counter_flag){
-					struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
-					if(counter_mismatch_jobj == NULL) {
-						counter_mismatch_jobj = json_object_new_object();
-						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
-						json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
-					}
-					else {
-						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
-					}
-					int total_count = 0;
-					struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
-					if (totcount_jobj != NULL) {
-						total_count = json_object_get_int64(totcount_jobj);
-					}				
-					json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
-				}
-				
-				fprintf(stderr, "[DATASET] AFTER UPDATE: %s\n", json_object_to_json_string(data_json));		
-				
-
-            }else{
-                // status query
-                // returns 0 or 1 for low and high risk respectively
-                //rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query");
-				fprintf(stderr, "[DATASET] BEFORE QUERY: %s\n", json_object_to_json_string(data_json));
-				struct json_object *userdata_jobj = json_object_object_get(data_json, "user_data");
-				if(userdata_jobj == NULL) {
-					rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset uninitialized: User does not exist");
-				}
-				else {
-					struct json_object *uuid_jobj = json_object_object_get(userdata_jobj, (char *) command_decrypted.buffer);
-					if(uuid_jobj == NULL) {
-						rc = s_send_status(peer_fd, STATUS_ERR, (const char *)"Dataset initialized: User does not exist");
-					}
-					else {
-						
-						int64_t query_counter = json_object_get_int64(json_object_object_get(uuid_jobj, "query_counter"));
-						json_object_object_add(uuid_jobj, "query_counter", json_object_new_int64(query_counter+1));
-						
-						int64_t total_counter = json_object_get_int64(json_object_object_get(data_json, "total_counter"));
-						json_object_object_add(data_json, "total_counter", json_object_new_int64(total_counter+1));	
-						
-						struct json_object *testhist_jobj = json_object_object_get(uuid_jobj, "test_history");
-						const char * test_hist = json_object_get_string(testhist_jobj);
-						if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
-							query_result = 1;
-						}
-						else{
-							query_result = 0;
-						}
-						// rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");
-						// TODO: return query_counter to user as well
-					}
-				}
-				
-				// Handle delta in global_counter vs total_counter
-				if (mismatch_counter_flag){
-					struct json_object *counter_mismatch_jobj = json_object_object_get(data_json, "counter_mismatch");
-					if(counter_mismatch_jobj == NULL) {
-						counter_mismatch_jobj = json_object_new_object();
-						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
-						json_object_object_add(data_json, "counter_mismatch", counter_mismatch_jobj);
-					}
-					else {
-						json_object_object_add(counter_mismatch_jobj, hexstring, json_object_new_int64((int64_t)mismatch_counter_delta));
-					}
-					int total_count = 0;
-					struct json_object *totcount_jobj = json_object_object_get(data_json, "total_counter");
-					if (totcount_jobj != NULL) {
-						total_count = json_object_get_int64(totcount_jobj);
-					}				
-					json_object_object_add(data_json, "total_counter", json_object_new_int64((int64_t)total_count+mismatch_counter_delta));
-				}
-				
-				fprintf(stderr, "[DATASET] AFTER QUERY: %s\n", json_object_to_json_string(data_json));
-						
-				fprintf(stderr, "[KEYGEN] AFTER QUERY\n");
-                //RANDOM KEYGEN AND ENCRYPTION
-			
-				/*
-                struct json_object *command_obj = json_object_object_get(data_json, (char *) command_decrypted.buffer);
-                const char * test_hist = json_object_get_string(command_obj);
-
-                // Currently, we return a binary risk assessment - 0 if two negative tests, otherwise 1
-                // This can be expanded - return a continuous value by complex analysis a user's test history or additional data added to the dataset.
-                if (strlen(test_hist) < 2 || strcmp((const char *)test_hist + strlen(test_hist) - 2, "00")==1){
-                    rc = s_send_status(peer_fd, STATUS_OK, "1");
-                }
-                else{
-                    rc = s_send_status(peer_fd, STATUS_OK, "0");
-                }
-                rc = s_send_status(peer_fd, STATUS_OK, (const char *)"query failed?");*/
             }
 
             // Generate random data key
@@ -1226,12 +1259,18 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             //fail_on(rc != AWS_OP_SUCCESS, loop_next_err, "Could not encrypt data key");
 
             // Return 1. AES-GCM encrypted, updated data and 2. KMS encypted AES-GCM data key package to the host instance
+
+            rc = s_send_data_key_query(peer_fd, STATUS_OK, (char *) encoded_reencrypted_data.buffer, (char *) enc_key.buffer, batch_result);
+
+            /*
             if (query_result == -1){
                 rc = s_send_data_key(peer_fd, STATUS_OK, (char *) encoded_reencrypted_data.buffer, (char *) enc_key.buffer);
             }
             else{
                 rc = s_send_data_key_query(peer_fd, STATUS_OK, (char *) encoded_reencrypted_data.buffer, (char *) enc_key.buffer, query_result + '0');
             }
+            */
+
             break_on(rc <= 0);
 
         } else {

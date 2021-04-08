@@ -113,6 +113,7 @@ if __name__ == '__main__':
         if cur_data != None:
           m.update(cur_data)
         if cmd != None:
+          print(cmd)
           m.update(cmd)
         m.update(b"1")
         inputHash = m.hexdigest()

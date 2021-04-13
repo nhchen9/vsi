@@ -104,7 +104,7 @@ if __name__ == '__main__':
     fails = 0
     start = time.time()
 
-    batch_size = 2
+    batch_size = 1
 
     for i in range(100000):
         

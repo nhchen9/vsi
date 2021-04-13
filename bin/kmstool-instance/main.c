@@ -1,3 +1,12 @@
+/*
+
+RokWall Virtual Status Card Instance Code
+
+Nicholas Chen, Mohammad Behnia, Aneesh Lodhavia, Ruihao Yao, Vikram Sharma Mailthody 2021
+
+Template from https://github.com/aws/aws-nitro-enclaves-sdk-c
+*/
+
 #include <aws/common/command_line_parser.h>
 #include <aws/common/condition_variable.h>
 #include <aws/common/encoding.h>

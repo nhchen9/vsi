@@ -1,3 +1,12 @@
+/*
+
+RokWall Virtual Status Card Enclave Code
+
+Nicholas Chen, Mohammad Behnia, Aneesh Lodhavia, Ruihao Yao, Vikram Sharma Mailthody 2021
+
+Template from https://github.com/aws/aws-nitro-enclaves-sdk-c
+*/
+
 #include <aws/nitro_enclaves/kms.h>
 #include <aws/nitro_enclaves/nitro_enclaves.h>
 

@@ -1,3 +1,9 @@
+'''
+RokWall Virtual Status Card Host Code
+
+Nicholas Chen, Mohammad Behnia, Aneesh Lodhavia, Ruihao Yao, Vikram Sharma Mailthody 2021
+'''
+
 import boto3
 import json
 import logging

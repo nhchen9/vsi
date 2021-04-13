@@ -1,3 +1,9 @@
+'''
+RokWall Virtual Status Card Host Code
+
+Nicholas Chen, Mohammad Behnia, Aneesh Lodhavia, Ruihao Yao, Vikram Sharma Mailthody 2021
+'''
+
 import boto3
 import json
 import logging
@@ -104,7 +110,7 @@ if __name__ == '__main__':
     fails = 0
     start = time.time()
 
-    batch_size = 1
+    batch_size = 10
 
     for i in range(100000):
         

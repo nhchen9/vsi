@@ -736,7 +736,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
              5. Return val (either result or updated data)
              */
 
-
+            //fprintf(stderr, "a");
             fprintf(stderr, "\nNEW ENCLAVE COMMAND\n");
             struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
             struct json_object *datakey_obj = json_object_object_get(object, "data_key");

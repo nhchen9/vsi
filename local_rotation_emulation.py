@@ -45,6 +45,7 @@ def run_complete(cid, command, data, key, signature, value):
     if key == None:
       key = "None"
     docker_client = docker.from_env()
+    print('/kmstool_instance --cid "{cid}" "{command}" "{data}" "{key}" "{sig}" "{value}"'.format(cid=cid, data=data, command=command, key=key, sig=signature, value=value))
     container = docker_client.containers.run(image='kmstool-instance', network='host', command='/kmstool_instance --cid "{cid}" "{command}" "{data}" "{key}" "{sig}" "{value}"'.format(cid=cid, data=data, command=command, key=key, sig=signature, value=value), remove = True, stdout = False, stderr = True, detach=False)
     #print(cid, command, data, key, signature, value)
     #print(container)
@@ -109,8 +110,8 @@ if __name__ == '__main__':
     enclave_id = None
     fails = 0
     start = time.time()
-
-    batch_size = 10
+    
+    batch_size = 1
 
     for i in range(100000):
         

@@ -1,3 +1,12 @@
+/*
+
+RokWall Virtual Status Card Enclave Code
+
+Nicholas Chen, Mohammad Behnia, Aneesh Lodhavia, Ruihao Yao, Vikram Sharma Mailthody 2021
+
+Template from https://github.com/aws/aws-nitro-enclaves-sdk-c
+*/
+
 #include <aws/nitro_enclaves/kms.h>
 #include <aws/nitro_enclaves/nitro_enclaves.h>
 
@@ -732,7 +741,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
             struct json_object *datakey_obj = json_object_object_get(object, "data_key");
             
-            fail_on(datakey_obj == NULL && ciphertext_obj != NULL, loop_next_err, "Ciphertext needs data key");
+            fail_on(datakey_obj == NULL && (ciphertext_obj != NULL && (strcmp(json_object_get_string(ciphertext_obj), "None") != 0)), loop_next_err, "Ciphertext needs data key");
 
             struct json_object *data_json = NULL;
 

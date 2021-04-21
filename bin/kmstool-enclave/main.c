@@ -741,7 +741,7 @@ static void handle_connection(struct app_ctx *app_ctx, int peer_fd) {
             struct json_object *ciphertext_obj = json_object_object_get(object, "Ciphertext");
             struct json_object *datakey_obj = json_object_object_get(object, "data_key");
             
-            fail_on(datakey_obj == NULL && ciphertext_obj != NULL, loop_next_err, "Ciphertext needs data key");
+            fail_on(datakey_obj == NULL && (ciphertext_obj != NULL && (strcmp(json_object_get_string(ciphertext_obj), "None") != 0)), loop_next_err, "Ciphertext needs data key");
 
             struct json_object *data_json = NULL;
 

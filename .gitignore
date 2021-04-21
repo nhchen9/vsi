@@ -22,4 +22,5 @@ _build
 build
 _build_*
 cmake-build*
-
+./local_data/data.txt
+./local_data/key.txt
